@@ -19,6 +19,7 @@ GSet.prototype = new EventEmitter()
 /*
   this should apply to any 
 */
+GSet.prototype.set =
 GSet.prototype.add = function (key, oKey, val) {
   if(!this.objects[key]) {
     var self = this
@@ -30,7 +31,7 @@ GSet.prototype.add = function (key, oKey, val) {
     })
   }
   this.objects[key].set(oKey, val)
-
+  
 }
 
 GSet.prototype.enqueue = function (obj) {
@@ -58,17 +59,17 @@ GSet.prototype.flush = function (obj) {
 }
 
 GSet.prototype.update = function (update) {
-  console.log(':::::', update)
+  console.log('::::: UPDATE', update, this.name)
   var key = update[0].shift()
   var array = this.array
   if(!this.objects[key]) {
-    this.state[key] = (this.objects[key] = new Obj(key)).state
+    this.state[key] = (this.objects[key] = new Obj(key)).get()
   }
   var obj = this.objects[key]
   //does this need histroy at this level?
   //all that can happen is creation.
   obj.update(update)
-
+  this.emit('update', key, this.state[key])
 /*
 // DELETES. move this to Set.
 //

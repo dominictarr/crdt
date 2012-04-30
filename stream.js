@@ -2,29 +2,31 @@
 var Stream = require('stream').Stream
 var crdt = require('./index')
 module.exports = 
-function create () {
-  return addStreaming(new crdt.GSet('set'))
+function create (set) {
+  return createStream(set || new crdt.GSet('set'))
 }
 
-function addStreaming(set) {
+function createStream(set) {
 
-  s = set
+  if(!set)
+    throw new Error('expected a collection CRDT')
+  var s = new Stream()
   var sequence = 1
-  s.pipe = Stream.prototype.pipe
   //s.set = set
   var queued = false
   s.readable = s.writable = true
 
-  s._flush = function () {
+  s.flush = function () {
+    console.log('will flush?', queued)
     if(!queued) return
-
     var updates = set.flush()
+    console.log(updates)
     if(!updates.length)
       throw new Error('NO UPDATES?')
     while(updates.length) { 
       var update = updates.shift()
       if(update) {
-        update.push(sequence++)
+        update.push(sequence++) // append sequence numbers for this oregin
         s.emit('data', update)
       }
     }
@@ -41,6 +43,7 @@ function addStreaming(set) {
   s.write = function (update) {
     // [path, time, update]
     // hard code only one Set right now.
+    console.log('###', update)
 
     update[0].shift()
 
