@@ -1,21 +1,15 @@
 var crdt = require('..')
 var test = require('tap').test
 var es   = require('event-stream')
-var assert = require('assert')
-/*
-  here I will figure out some CRDT communication.
-*/
+//var assert = require('assert')
+var assert = require('assertions')
 
-test('random', function (t) {
-
-  var a = crdt.createStream()
-  var b = crdt.createStream()
+var validateUpdates = function (t) {
   var lastTime
   var lastSeq
-  var updates = []
-  b.pipe(es.mapSync(function (update) {
+
+ return es.mapSync(function (update) {
     t.ok(Array.isArray(update[0]))
-    console.log(update)
     t.type(update[1], 'object')
     t.type(update[2], 'number')
     t.type(update[3], 'number')
@@ -25,41 +19,55 @@ test('random', function (t) {
       t.equal(update[3], lastSeq + 1)
     lastTime = update[2]
     lastSeq  = update[3]
-    updates.push(update)
     return update
-  })).pipe(a)
+  })
 
-  var sets = ['a', 'b', 'c']
-  var keys = ['x', 'y', 'z']
+}
+/*
+  here I will figure out some CRDT communication.
+*/
+
+function randomUpdates(crdt, opts) {
+  opts = opts || {}
+  var sets = opts.sets || ['a', 'b', 'c']
+  keys = opts.keys || ['x', 'y', 'z']
+  values = opts.values || 10
 
   function rand(of) {
     var i = Math.floor(Math.random() * (of.length || of))
     return of[i] || i
   }
 
-  var l = 100
+  var l = opts.total || 100
 
   while (l--) {
-    b.add(rand(sets), rand(keys), rand(10))
+    crdt.set(rand(sets), rand(keys), rand(values))
   }
+}
  
-  b._flush() //this would be called in next tick
+test('random', function (t) {
 
-   console.log('B:', b.get())
+  var a = new crdt.GSet('set')
+  var b = new crdt.GSet('set')
+  var as = crdt.createStream(a)
+  var bs = crdt.createStream(b)
+  bs.pipe(validateUpdates(t)).pipe(as)
+
+  randomUpdates(b)
+
+  bs.flush() //this would be called in next tick
+
+  console.log('B:', b.get())
   console.log('A:', a.get())
-
- console.log('B:', b.get())
-  console.log('A:', a.get())
-
 
   //use regular deep equal because tap
   //fails on key ordering.
   //which is probably going to be different
   //because messages may not be in order
 
-  console.log(updates)
   var A = a.get()
   var B = b.get()
+
   assert.deepEqual(b.get(), a.get())
 
   t.end()
@@ -102,4 +110,33 @@ each type implements these methods...
 */
 
 
+test ('histroy', function (t) {
+//here we update b before the pipe is connected.
+//then connect the pipe. 
+//the stream it expected to figure out that there is histroy to send
+//and send it so that everyone is in sync.
+  var a = new crdt.GSet('set')
+  var b = new crdt.GSet('set')
+  var as = crdt.createStream(a)
+  var bs = crdt.createStream(b)
 
+  //XXX difference between 'histroy' and 'random' is 
+  //    the order of .pipe(..) or randomUpdates()
+
+  randomUpdates(b)
+
+  bs.flush() //act like the updates where made ages ago.
+             //already sent, acient histroy.
+             //however, they may still affect current state.
+
+  bs.pipe(validateUpdates(t)).pipe(as)
+  
+  bs.flush() //this would be called in next tick
+
+  var A = a.get()
+  var B = b.get()
+
+  assert.deepEqual(b.get(), a.get())
+
+  t.end()
+})
