@@ -229,3 +229,68 @@ test ('histroy3', function (t) {
 
   t.end()
 })
+
+test ('client-server', function (t) {
+  var a = new crdt.GSet('set')
+  var b = new crdt.GSet('set')  
+  var c = new crdt.GSet('set')
+
+  var as = crdt.createStream(a, 'a')
+  var bs = crdt.createStream(b, 'b')
+  var bs2 = crdt.createStream(b, 'b2')
+  var cs = crdt.createStream(c, 'c')
+
+  //B is the Server, A and C are clients.
+  //will apply updates to A, expect them to eventually propagate to C
+
+  cs.pipe(bs2).pipe(validateUpdates(t)).pipe(cs)
+
+  as.pipe(bs).pipe(validateUpdates(t)).pipe(as)
+
+  randomUpdates(a)
+  as.flush() 
+  bs.flush()
+  bs2.flush()
+  console.log('flushed!')
+
+  assert.deepEqual(b.get(), a.get())
+  assert.deepEqual(b.get(), c.get())
+
+  randomUpdates(c)
+
+  cs.flush() 
+  bs2.flush() 
+  bs.flush()
+
+  console.log(cs.queue, bs2.queue, bs.queue, as.queue)
+
+  assert.deepEqual(b.get(), c.get())
+//  assert.deepEqual(b.get(), a.get())
+
+//  randomUpdates(b)
+  
+  //not flushed yet
+ 
+  //bs.flush() //this would be called in next tick
+  //bs2.flush()
+  //console.log('flushed!')
+  // THIS IS A PROBLEM.
+  // since updates are cleared when flush it called
+  // it won't work if they are written by more than one stream!
+  // need to send updates to both streams.
+  // so... emit them rather than return them...
+
+  // IDEA. maybe emit changes when they first occur
+  // then continue to change them until it's flushed.
+  // (which clears the changes)
+
+  // AHA! the CRDT decides when to flush changes.
+  // not the stream.
+
+  // the crdt will emit 'flush'.
+
+  assert.deepEqual(b.get(), a.get())
+  assert.deepEqual(b.get(), c.get())
+
+  t.end()
+})
