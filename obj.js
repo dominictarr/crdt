@@ -69,14 +69,12 @@ Obj.prototype.set = function (key, value) {
     if(this.changes[key] != value) {
       changed = true
       this.changes[key] = value
-      set(this.state, key, value)
     } 
   } else {
     for (var k in key) {
       if(this.changes[k] != key[k]) {
         changed = true
         this.changes[k] = key[k]
-        //set(this.state, k, key[k])
       }
     }
   }
