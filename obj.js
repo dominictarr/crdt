@@ -2,6 +2,7 @@
 module.exports = Obj
 
 var EventEmitter = require('events').EventEmitter
+var clone = require('./utils').clone
 
 //this will be injectable,
 //to support different types of models.
@@ -29,15 +30,15 @@ Obj.prototype = new EventEmitter()
 Obj.prototype.history = function () {
   var id = this.id
   return this.hist.map(function (e) {
-    e = e.slice()
+    e = clone(e)
     e.unshift([id])
     return e
   })
 }
 
 Obj.prototype.update = function (update) {
-  update    = update.slice()
-  var path  = update.shift().slice()
+  update    = clone(update)
+  var path  = update.shift()
   var hist  = this.hist
   var last  = hist[hist.length - 1]
   var state = this.state

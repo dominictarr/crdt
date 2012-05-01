@@ -2,6 +2,7 @@ module.exports = GSet
 
 var EventEmitter = require('events').EventEmitter
 var Obj = require('./obj')
+var clone = require('./utils').clone
 
 /*
   GSet -- grow only set.
@@ -50,11 +51,13 @@ GSet.prototype.flush = function (obj) {
   var id = this.id
   var updates = []
   var queue = this.queue
+  if(!queue.length)
+    return
   while(queue.length) {
     //note: an object MAY NOT be a member of more than one set.
     var update = queue.shift().flush()
     if(!update) return
-    update = update.slice()
+    update = clone(update)
     update[0].unshift(id)
     updates.push(update)
   }
@@ -68,7 +71,7 @@ GSet.prototype.history = function () {
   var id = this.id
   for(var k in objects)
     objects[k].history().forEach(function (e) {
-      e = e.slice()
+      e = clone(e)
       e[0].unshift(id)
         
       hist.push(e)
@@ -77,8 +80,8 @@ GSet.prototype.history = function () {
 }
 
 GSet.prototype.update = function (update) {
-  update = update.slice()
-  var key = (update[0] = update[0].slice()).shift()
+  update = clone(update)
+  var key = update[0].shift()
   var array = this.array
   if(!this.objects[key]) {
     this.state[key] = (this.objects[key] = new Obj(key)).get()
