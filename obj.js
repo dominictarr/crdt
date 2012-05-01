@@ -18,18 +18,27 @@ function merge(to, from) {
 }
 
 function Obj (id) {
-  this.id = id
-  this.state = {}
-  this.history = []
+  this.id      = id
+  this.state   = {}
+  this.hist    = []
   this.changes = null
 }
 
 Obj.prototype = new EventEmitter()
 
+Obj.prototype.history = function () {
+  var id = this.id
+  return this.hist.map(function (e) {
+    e = e.slice()
+    e.unshift([id])
+    return e
+  })
+}
+
 Obj.prototype.update = function (update) {
   update    = update.slice()
-  var path  = update.shift()
-  var hist  = this.history
+  var path  = update.shift().slice()
+  var hist  = this.hist
   var last  = hist[hist.length - 1]
   var state = this.state
 
@@ -44,8 +53,6 @@ Obj.prototype.update = function (update) {
   } else {
     hist.push(update)
     hist.sort(function (a, b) {
-      if(a[1] == b[1])
-        console.log(a, b)
       return (a[1] - b[1]) || (a[2] - b[2])
     })
     hist.forEach(function (up) {
@@ -88,5 +95,6 @@ Obj.prototype.flush = function () {
   this.update(update)
   update[0].unshift(this.id)
   this.emit('update', changes)
+  this.emit('flush', update)
   return update
 }
