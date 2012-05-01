@@ -8,7 +8,8 @@ var validateUpdates = function (t) {
   var lastTime
   var lastSeq
 
- return es.mapSync(function (update) {
+  return es.mapSync(function (update) {
+    assert.equal(update.length, 4, 'length of update')
     t.ok(Array.isArray(update[0]))
     t.type(update[1], 'object')
     t.type(update[2], 'number')
@@ -21,7 +22,6 @@ var validateUpdates = function (t) {
     lastSeq  = update[3]
     return update
   })
-
 }
 /*
   here I will figure out some CRDT communication.
@@ -29,7 +29,7 @@ var validateUpdates = function (t) {
 
 function randomUpdates(crdt, opts) {
   opts = opts || {}
-  var sets = opts.sets || ['a', 'b', 'c']
+  var sets = opts.sets || 'abcdefghijk'.split('')
   keys = opts.keys || ['x', 'y', 'z']
   values = opts.values || 10
 
@@ -38,27 +38,30 @@ function randomUpdates(crdt, opts) {
     return of[i] || i
   }
 
-  var l = opts.total || 100
+  var l = opts.total || 7
 
   while (l--) {
     crdt.set(rand(sets), rand(keys), rand(values))
   }
+}
+
+function clone(stream) {
+  return es.mapSync(function (e) {
+    return JSON.parse(JSON.stringify(e))
+  })
 }
  
 test('random', function (t) {
 
   var a = new crdt.GSet('set')
   var b = new crdt.GSet('set')
-  var as = crdt.createStream(a)
-  var bs = crdt.createStream(b)
+  var as = crdt.createStream(a, 'a')
+  var bs = crdt.createStream(b, 'b')
   bs.pipe(validateUpdates(t)).pipe(as)
 
   randomUpdates(b)
 
   bs.flush() //this would be called in next tick
-
-  console.log('B:', b.get())
-  console.log('A:', a.get())
 
   //use regular deep equal because tap
   //fails on key ordering.
@@ -133,10 +136,96 @@ test ('histroy', function (t) {
   
   bs.flush() //this would be called in next tick
 
-  var A = a.get()
-  var B = b.get()
+  //what if there where random updates, then was flushed
+  //then more changes then flush..
 
   assert.deepEqual(b.get(), a.get())
+
+  t.end()
+})
+
+
+test ('histroy2', function (t) {
+//here we update b before the pipe is connected.
+//then connect the pipe. 
+//the stream it expected to figure out that there is histroy to send
+//and send it so that everyone is in sync.
+  var a = new crdt.GSet('set')
+  var b = new crdt.GSet('set')
+  var as = crdt.createStream(a, 'a')
+  var bs = crdt.createStream(b, 'b')
+
+  //XXX difference between 'histroy' and 'random' is 
+  //    the order of .pipe(..) or randomUpdates()
+
+  randomUpdates(b)
+
+  bs.flush() //act like the updates where made ages ago.
+             //already sent, acient histroy.
+             //however, they may still affect current state.
+
+  randomUpdates(b)
+  //not flushed yet
+  bs.pipe(validateUpdates(t)).pipe(as)
+  
+  bs.flush() //this would be called in next tick
+
+  //what if there where random updates, then was flushed
+  //then more changes then flush..
+
+  assert.deepEqual(b.get(), a.get())
+
+  t.end()
+})
+
+
+test ('histroy3', function (t) {
+//here we update b before the pipe is connected.
+//then connect the pipe. 
+//the stream it expected to figure out that there is histroy to send
+//and send it so that everyone is in sync.
+  var a = new crdt.GSet('set')
+  var b = new crdt.GSet('set')  
+  var c = new crdt.GSet('set')
+  var as = crdt.createStream(a, 'a')
+  var bs = crdt.createStream(b, 'b')
+  var bs2 = crdt.createStream(b, 'b2')
+  var cs = crdt.createStream(c, 'c')
+
+  //XXX difference between 'histroy' and 'random' is 
+  //    the order of .pipe(..) or randomUpdates()
+
+  bs2.pipe(validateUpdates(t)).pipe(cs)
+
+  randomUpdates(b)
+  bs2.flush() 
+  console.log('flushed!')
+
+  randomUpdates(b)
+  //not flushed yet
+  bs.pipe(validateUpdates(t)).pipe(as)
+ 
+  bs.flush() //this would be called in next tick
+  bs2.flush()
+  console.log('flushed!')
+  // THIS IS A PROBLEM.
+  // since updates are cleared when flush it called
+  // it won't work if they are written by more than one stream!
+  // need to send updates to both streams.
+  // so... emit them rather than return them...
+
+  // IDEA. maybe emit changes when they first occur
+  // then continue to change them until it's flushed.
+  // (which clears the changes)
+
+  // AHA! the CRDT decides when to flush changes.
+  // not the stream.
+
+  // the crdt will emit 'flush'.
+
+  assert.deepEqual(b.get(), a.get())
+
+  assert.deepEqual(b.get(), c.get())
 
   t.end()
 })
