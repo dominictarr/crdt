@@ -55,12 +55,18 @@ GSet.prototype.flush = function (obj) {
     return
   while(queue.length) {
     //note: an object MAY NOT be a member of more than one set.
-    var update = queue.shift().flush()
+    var obj = queue.shift()
+    var update = obj.flush()
+
+    this.emit('update', obj.id, obj.get())
+
     if(!update) return
     update = clone(update)
     update[0].unshift(id)
     updates.push(update)
+
   }
+  
   this.emit('flush', updates)
   return updates
 }
