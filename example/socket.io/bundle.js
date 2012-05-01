@@ -414,12 +414,18 @@ GSet.prototype.flush = function (obj) {
     return
   while(queue.length) {
     //note: an object MAY NOT be a member of more than one set.
-    var update = queue.shift().flush()
+    var obj = queue.shift()
+    var update = obj.flush()
+
+    this.emit('update', obj.id, obj.get())
+
     if(!update) return
     update = clone(update)
     update[0].unshift(id)
     updates.push(update)
+
   }
+  
   this.emit('flush', updates)
   return updates
 }
@@ -726,14 +732,12 @@ Obj.prototype.set = function (key, value) {
     if(this.changes[key] != value) {
       changed = true
       this.changes[key] = value
-      set(this.state, key, value)
     } 
   } else {
     for (var k in key) {
       if(this.changes[k] != key[k]) {
         changed = true
         this.changes[k] = key[k]
-        //set(this.state, k, key[k])
       }
     }
   }
@@ -795,6 +799,7 @@ function createStream(set, name) {
   //s.set = seex kt
   var queued = false
   var queue = []
+  s.queue = queue
   s.readable = s.writable = true
   s.pipe = function (stream) {
 
@@ -808,10 +813,7 @@ function createStream(set, name) {
     while(hist.length)
       queue.push(hist.shift())        
 
-    console.log('ENQUEUED HISTORY', queue)    
-
     set.on('flush', function (updates) {
-      console.log('-->FLUSHED')
       updates.forEach(function (e) {
         queue.push(e)
       }) 
@@ -820,7 +822,6 @@ function createStream(set, name) {
 
   //emit data that has 
   set.on('written', function (update, _id) {
-    console.log('WRITTEN', update, _id, s._id)
     if(_id == s._id) return
     queue.push(update)
     process.nextTick(s.flush)
@@ -837,7 +838,7 @@ function createStream(set, name) {
 
   s.flush = function () {
     //if(!queue.length) 
-    set.flush()//force a flush
+    set.flush()//force a flush, will emit and append to queue
     if(!queue.length)
       return
 
@@ -846,8 +847,7 @@ function createStream(set, name) {
       //with the test
       var update = clone(queue.shift())
       if(update) {
-        update.push(sequence++) // append sequence numbers for this oregin
-        console.log('>data>', name, update)
+        update[3] = sequence++ // append sequence numbers for this oregin
         s.emit('data', update)
       }
     }
@@ -856,7 +856,6 @@ function createStream(set, name) {
   }
 
   set.on('queue', function () {
-    console.log('QUEUE')
     if(queue.length) return
     process.nextTick(s.flush)
   })
@@ -874,7 +873,6 @@ WRITES FROM OTHER NODES MUST BE WRITTEN TO ALL LISTENERS.
     // hard code only one Set right now.
     var _update = clone(update)
     update[0].shift()
-
     set.update(update)
 
     // now is when it's time to emit events?
