@@ -21,6 +21,7 @@ function createStream(set, name) {
   //s.set = seex kt
   var queued = false
   var queue = []
+  s.queue = queue
   s.readable = s.writable = true
   s.pipe = function (stream) {
 
@@ -34,10 +35,7 @@ function createStream(set, name) {
     while(hist.length)
       queue.push(hist.shift())        
 
-    console.log('ENQUEUED HISTORY', queue)    
-
     set.on('flush', function (updates) {
-      console.log('-->FLUSHED')
       updates.forEach(function (e) {
         queue.push(e)
       }) 
@@ -46,7 +44,6 @@ function createStream(set, name) {
 
   //emit data that has 
   set.on('written', function (update, _id) {
-    console.log('WRITTEN', update, _id, s._id)
     if(_id == s._id) return
     queue.push(update)
     process.nextTick(s.flush)
@@ -63,7 +60,7 @@ function createStream(set, name) {
 
   s.flush = function () {
     //if(!queue.length) 
-    set.flush()//force a flush
+    set.flush()//force a flush, will emit and append to queue
     if(!queue.length)
       return
 
@@ -72,8 +69,7 @@ function createStream(set, name) {
       //with the test
       var update = clone(queue.shift())
       if(update) {
-        update.push(sequence++) // append sequence numbers for this oregin
-        console.log('>data>', name, update)
+        update[3] = sequence++ // append sequence numbers for this oregin
         s.emit('data', update)
       }
     }
@@ -82,7 +78,6 @@ function createStream(set, name) {
   }
 
   set.on('queue', function () {
-    console.log('QUEUE')
     if(queue.length) return
     process.nextTick(s.flush)
   })
@@ -100,7 +95,6 @@ WRITES FROM OTHER NODES MUST BE WRITTEN TO ALL LISTENERS.
     // hard code only one Set right now.
     var _update = clone(update)
     update[0].shift()
-
     set.update(update)
 
     // now is when it's time to emit events?
