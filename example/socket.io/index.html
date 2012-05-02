@@ -3,8 +3,16 @@
   <head>
     <script src=socket.io/socket.io.js></script>
     <script src=bundle.js></script>
+  <style>
+    #chat {
+      max-height: 200px;
+      min-height: 200px;
+      overflow-y: scroll;
+    }
+  </style>
   </head>
   <body>
     <h1>crdt: hello world</h1>
+  <input id=input type=text>
   </body> 
 </html>
