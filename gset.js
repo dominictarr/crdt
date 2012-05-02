@@ -10,11 +10,18 @@ var clone = require('./utils').clone
   base class for other collection types.
 */
 
-function GSet(id) {
+function defFactory (id) {
+  var obj = new Obj(id)
+  this[id] = obj.get()
+  return obj 
+}
+
+function GSet(id, state, factory) {
   this.id = id
-  this.state = {}
+  this.state = state || {}
   this.objects = {}
   this.queue = []
+  this._factory = factory || defFactory
 }
 
 GSet.prototype = new EventEmitter()
@@ -32,14 +39,22 @@ GSet.prototype.add = function (key, oKey, val) {
     self.queue.push(obj)
     self.emit('queue')
   }
-  
-  if(!this.objects[key]) {
-    var obj = this.objects[key] = new Obj(key)
-    this.state[key] = obj.get()
+  var f = this._factory
+  function create (key) {
+    return f.call(self.state, key)
+  }
+ 
+  if(!this.objects[key]) {   //REPEATING THIS CODE.
+    var obj = this.objects[key] = create(key)
+    //I think I want to control state like I do for obj.
+    //HMMM. think that the factory should be responsible for creating 
+    //state
+    
+//    this.state[key] = obj.get()
     obj.on('queue', function () { enqueue (obj) })
   }
-  this.objects[key].set(oKey, val)
-  
+
+  this.objects[key].set(oKey, val) 
 }
 
 /*
@@ -89,14 +104,21 @@ GSet.prototype.update = function (update) {
   update = clone(update)
   var key = update[0].shift()
   var array = this.array
+  var self = this
+
+  var f = this._factory
+  function create () {
+    return f.call(self.state, key)
+  }
+
   if(!this.objects[key]) {
-    this.state[key] = (this.objects[key] = new Obj(key)).get()
+    this.objects[key] = create()
   }
   var obj = this.objects[key]
   //does this need histroy at this level?
   //all that can happen is creation.
   obj.update(update)
-  this.emit('update', key, this.state[key])
+  this.emit('update', key, obj.get())
 
 /*
 // DELETES. move this to Set.

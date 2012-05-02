@@ -8,21 +8,29 @@ var clone = require('./utils').clone
 //to support different types of models.
 //i.e. using backbone or knockout.
 
-function set (obj, key, val) {
-  obj[key] = val
-}
 
-function merge(to, from) {
+function merge(to, from, set) {
   for(var k in from)
-    set(to, k, from[k])
+    set.call(to, k, from[k])
   return to
 }
 
-function Obj (id) {
+var defFactory = function (key, val) {
+    /*
+      or use 
+        self.set(key, val)
+      or
+        self[key] = self[key] ? self[key](val) : ko.observable(val)
+    */
+    this[key] = val
+  }
+
+function Obj (id, state, factory) {
   this.id      = id
-  this.state   = {}
+  this.state   = state || {}
   this.hist    = []
   this.changes = null
+  this._set    = factory || defFactory
 }
 
 Obj.prototype = new EventEmitter()
@@ -42,13 +50,14 @@ Obj.prototype.update = function (update) {
   var hist  = this.hist
   var last  = hist[hist.length - 1]
   var state = this.state
+  var _set  = this._set
 
   if(path.length)
     throw new Error('should not have path here:' + path)
 
   //if update is newer than any previous update. 
   if(!last || update[1] > last[1]) { //also use sequence number
-      merge(state, update[0]) //this will be injectable
+      merge(state, update[0], this._set) //this will be injectable
       hist.push(update)
   //if the update has arrived out of order.  
   } else {
@@ -57,7 +66,7 @@ Obj.prototype.update = function (update) {
       return (a[1] - b[1]) || (a[2] - b[2])
     })
     hist.forEach(function (up) {
-      merge(state, up[0])
+      merge(state, up[0], _set)
     })
   }
 }
