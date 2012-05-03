@@ -2,7 +2,7 @@
   "author": "Dominic <dominic.tarr@gmail.com> (http://dominictarr.com)",
   "name": "crdt",
   "description": "Commutative Replicated Data Types for easy distributed/collaborative apps",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "homepage": "http://github.com/dominictarr/crdt",
   "repository": {
     "url": ""
