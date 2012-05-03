@@ -111,10 +111,21 @@ test('clients - server', function (t) {
 
   but at least it would stop.
 
-  to get more correct than that, merkle trees?
+  another may: only send an update if it is significant (news).
 
-  or is there a simpler way?
+  but how to get the number of messages down to Nodes + Messages?
 
+  merkle tree?
+
+  it's probably necessary to use something like that in order to manage
+  not resend data a reconnecting node already knows.
+
+  or, what is the balance between unnecessary throughput... and latency?
+  is there some variation on a gossip protocol that can efficently send all updates
+  yet not dramitically over-send?
+
+  I'm getting ahead of my self, the first optimization in this area is just
+  to GC the 
 */
 
 test('peer2peer', {skip: true}, function (t) {
