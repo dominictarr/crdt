@@ -99,7 +99,17 @@ Obj.prototype.flush = function () {
   if(!this.changes) return 
   var changes = this.changes
   this.changes = null
-  var update = [[], changes, Date.now()]
+  /*
+    timestamping with milliseconds is not precise enough to generate a
+    unique timestamp every time.
+    adding a random number 0 < r < 1 will enable a total order
+    (assuming that the random number does not collide at the same time 
+    as the timestamp. very unlikely)
+    another approach would be to get sort by source id. 
+    (but that isn't implemented yet)
+
+  */
+  var update = [[], changes, Date.now() + Math.random()]
   this.update(update)
   update[0].unshift(this.id)
   this.emit('update', changes)
