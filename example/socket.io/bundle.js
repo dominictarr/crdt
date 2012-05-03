@@ -464,16 +464,24 @@ GSet.prototype.update = function (update) {
   var key = update[0].shift()
   var array = this.array
   var self = this
-
+  var obj
   var f = this._factory
   function create () {
     return f.call(self.state, key)
   }
 
-  if(!this.objects[key]) {
-    this.objects[key] = create()
+  function enqueue (obj) {
+    if(~self.queue.indexOf(obj)) return
+    self.queue.push(obj)
+    self.emit('queue')
   }
-  var obj = this.objects[key]
+ 
+  if(!this.objects[key]) {
+    obj = this.objects[key] = create()
+    obj.on('queue', function () { enqueue(obj) }) 
+  }
+
+  obj = this.objects[key]
   //does this need histroy at this level?
   //all that can happen is creation.
   obj.update(update)
@@ -746,6 +754,7 @@ Obj.prototype.update = function (update) {
       hist.push(update)
   //if the update has arrived out of order.  
   } else {
+    console.log('update', update)
     hist.push(update)
     hist.sort(function (a, b) {
       return (a[1] - b[1]) || (a[2] - b[2])
@@ -759,6 +768,7 @@ Obj.prototype.update = function (update) {
 Obj.prototype.set = function (key, value) {
   this.changes = this.changes || {}
   var changed = false
+  console.log(key, value, this.changes)
   if('string' === typeof key) {
     if(this.changes[key] != value) {
       changed = true
@@ -1469,33 +1479,34 @@ module.exports = function (sock) {
 require.define("/client.js", function (require, module, exports, __dirname, __filename) {
     
 var crdt    = require('crdt')
-//var es      = require('event-stream')
 var _bs = require('browser-stream')
-
 var bs = _bs(io.connect('http://localhost:3000'))
 
 CONTENT = document.createElement('div')
 CONTENT.id = 'chat'
-var set = SET = new crdt.Set('set', CONTENT, function (key) {
+
+// setup crdt to update dom elements.
+
+var set = SET = new crdt.Set('set', {}, function (key) {
   var div = document.createElement('div')
-  var o = new crdt.Obj(key, div, function (key, val) { 
-    this.innerHTML += key +': ' + val + '\n'
+    var o = new crdt.Obj(key, {}, function (key, val) { 
+    console.log('update', key, val)
+    div.innerHTML = val + '\n'
+    this[key] = val
   })
   //this is CONTENT
-  this.appendChild(div) 
+  CONTENT.appendChild(div) 
   
   process.nextTick(function () {
+    //scroll to bottom
     CONTENT.scrollTop = 9999999
   }, 10)
+
   return o 
 })
 
 //or should I decouple this and just use events?
 //and paths?
-
-set.on('update', function (key, val) {
-  console.log('UPDATE', key, val)
-})
 
 var stream = crdt.createStream(set)
 
@@ -1504,51 +1515,30 @@ stream.pipe(BS = bs.createStream('test')).pipe(stream)
 window.onload = function () {
   var input = document.getElementById('input')
   input.onchange = function () {
-    SET.set(['#'+Math.random()], {text: this.value})
+    //enter chat message
+    var m = /s\/([^\\]+)\/(.*)/.exec(this.value)
+    if(m) {
+      var search = m[1]
+      var replace = m[2]
+      //search & replace
+      console.log('REPLACE:', search, 'WITH', replace)
+      var set = SET.objects
+      for(var k in set) {
+        //oh... I threw away the state. hmm. need to do that differently.
+        var text
+        if((text = set[k].get().text) && ~text.indexOf(search)) {
+          set[k].set('text', text.split(search).join(replace))
+          console.log('TEXT TO UPDATE', text)
+          //set doesn't seem to work when the value was set remotely
+        }
+      }
+      //set.flush()
+    } else 
+      SET.set(['#'+Math.random()], {text: this.value})
     this.value = ''
-    //scroll to bottom
   } 
   document.body.insertBefore(CONTENT, input)
 }
-
-/*
-  how to attach this to DOM?
-
-  pass in a factory that creates state for the CRDT.
-
-  init: function (id) //return a new object
-
-  set: function (state, key, val)
- 
-  by passing a factory factory to the set.
-
-  function (setId) {
-
-    return {
-      init: function (id) { //default
-        return {}
-      },
-      set: function (key, value) {
-        this[key] = value
-      }
-    }
-  }
-
-  what about at the set level?
-  only need init.
-
-  function (id) {
-    return new Obj(id, {}, function (key, val) {
-      //put validation here
-      //example, don't allow 'immutable' values to change.
-      //maybe you want to ignore changes to certain keys.
-      //maybe you could throw, and the stream could send 
-      //an error message
-      this[key] = val
-    })
-    //but could also create another Set?}
-
-*/
 
 });
 require("/client.js");
