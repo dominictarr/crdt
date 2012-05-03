@@ -1,56 +1,13 @@
-var crdt = require('..')
-var test = require('tap').test
-var es   = require('event-stream')
-//var assert = require('assert')
-var assert = require('assertions')
+var crdt    = require('..')
+var test    = require('tap').test
+var es      = require('event-stream')
+var assert  = require('assertions')
+var help    = require('./helpers')
 
-var validateUpdates = function (t) {
-  var lastTime
-  var lastSeq
+var randomUpdates   = help.randomUpdates
+var clone           = help.clone
+var validateUpdates = help.validateUpdates
 
-  return es.mapSync(function (update) {
-    assert.equal(update.length, 4, 'length of update')
-    t.ok(Array.isArray(update[0]))
-    t.type(update[1], 'object')
-    t.type(update[2], 'number')
-    t.type(update[3], 'number')
-    if(lastTime)
-      t.ok(update[2] >= lastTime)
-    if(lastSeq)
-      t.equal(update[3], lastSeq + 1)
-    lastTime = update[2]
-    lastSeq  = update[3]
-    return update
-  })
-}
-/*
-  here I will figure out some CRDT communication.
-*/
-
-function randomUpdates(crdt, opts) {
-  opts = opts || {}
-  var sets = opts.sets || 'abcdefghijk'.split('')
-  keys = opts.keys || ['x', 'y', 'z']
-  values = opts.values || 10
-
-  function rand(of) {
-    var i = Math.floor(Math.random() * (of.length || of))
-    return of[i] || i
-  }
-
-  var l = opts.total || 7
-
-  while (l--) {
-    crdt.set(rand(sets), rand(keys), rand(values))
-  }
-}
-
-function clone(stream) {
-  return es.mapSync(function (e) {
-    return JSON.parse(JSON.stringify(e))
-  })
-}
- 
 test('random', function (t) {
 
   var a = new crdt.GSet('set')
