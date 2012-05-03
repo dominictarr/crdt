@@ -55,7 +55,24 @@ Obj.prototype.update = function (update) {
   if(path.length)
     throw new Error('should not have path here:' + path)
 
-  //if update is newer than any previous update. 
+  /*
+    make this smarter?
+
+    figure out what has actually changed by applying the update?
+    or, should each update be validated itself?
+  */
+
+  try {
+    this.emit('validate', update[0], this /*, user_ctx*/)
+  } catch (e) {
+    //a change has been vetoed.
+    //send a message back to the source that undoes the change?
+    //certainly, don't send this message on.
+    //this will be considered an insignificant change. 
+    console.log('validation error', update[0])
+    return
+  }
+  //if update is -e newer than any previous update. 
   if(!last || update[1] > last[1]) { //also use sequence number
       merge(state, update[0], this._set) //this will be injectable
       hist.push(update)
@@ -69,6 +86,7 @@ Obj.prototype.update = function (update) {
       merge(state, up[0], _set)
     })
   }
+  this.emit('update', state, this, update[0])
 }
 
 Obj.prototype.set = function (key, value) {
@@ -112,7 +130,6 @@ Obj.prototype.flush = function () {
   var update = [[], changes, Date.now() + Math.random()]
   this.update(update)
   update[0].unshift(this.id)
-  this.emit('update', changes)
   this.emit('flush', update)
   return update
 }
