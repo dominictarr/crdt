@@ -33,7 +33,7 @@ function createStream(set, name) {
       return a[2] - b[2]
     })
     while(hist.length)
-      queue.push(hist.shift())        
+      queue.push(hist.shift()) 
 
     set.on('flush', function (updates) {
       updates.forEach(function (e) {
@@ -63,6 +63,11 @@ function createStream(set, name) {
     set.flush()//force a flush, will emit and append to queue
     if(!queue.length)
       return
+
+    //make sure the timestamps are in order
+    queue.sort(function (a, b) {
+      return a[2] - b[2]
+    })
 
     while(queue.length) { 
       //this is breaking stuff in tests, because references are shared
