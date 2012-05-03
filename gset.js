@@ -26,35 +26,40 @@ function GSet(id, state, factory) {
 
 GSet.prototype = new EventEmitter()
 
-/*
-  this should apply to any 
-*/
+function getMember (self, key) {
+  var f = self._factory
+  var obj
+
+  if(!self.objects[key]) {   //REPEATING THIS CODE.
+
+    function enqueue () {
+      if(~self.queue.indexOf(obj)) return
+      self.queue.push(obj)
+      self.emit('queue')
+    }
+
+    function create (key) {
+      return f.call(self.state, key)
+    }
+   
+    obj = self.objects[key] = create(key)
+    obj.on('queue', enqueue)
+  }
+
+  return self.objects[key]
+}
 
 GSet.prototype.set =
 GSet.prototype.add = function (key, oKey, val) {
+  getMember(this, key).set(oKey, val) 
+}
 
-  var self = this
-  function enqueue (obj) {
-    if(~self.queue.indexOf(obj)) return
-    self.queue.push(obj)
-    self.emit('queue')
-  }
-  var f = this._factory
-  function create (key) {
-    return f.call(self.state, key)
-  }
- 
-  if(!this.objects[key]) {   //REPEATING THIS CODE.
-    var obj = this.objects[key] = create(key)
-    //I think I want to control state like I do for obj.
-    //HMMM. think that the factory should be responsible for creating 
-    //state
-    
-//    this.state[key] = obj.get()
-    obj.on('queue', function () { enqueue (obj) })
-  }
-
-  this.objects[key].set(oKey, val) 
+GSet.prototype.update = function (update) {
+  update = clone(update)
+  var key = update[0].shift()
+  var obj = getMember(this, key)
+  obj.update(update)
+  this.emit('update', key, obj.get())
 }
 
 /*
@@ -100,48 +105,9 @@ GSet.prototype.history = function () {
   return hist
 }
 
-GSet.prototype.update = function (update) {
-  update = clone(update)
-  var key = update[0].shift()
-  var array = this.array
-  var self = this
-
-  var f = this._factory
-  function create () {
-    return f.call(self.state, key)
-  }
-
-  if(!this.objects[key]) {
-    this.objects[key] = create()
-  }
-  var obj = this.objects[key]
-  //does this need histroy at this level?
-  //all that can happen is creation.
-  obj.update(update)
-  this.emit('update', key, obj.get())
-
-/*
-// DELETES. move this to Set.
-//
-//
-
-  if(obj.get('__destroy')) { 
-    var i = array.indexOf(obj)
-    if(~i)    
-      array.splice(i, 1)  //emit splice?
-  } else if(obj.__destroy === false || obj.__destroy === null) {
-    if(!~array.indexOf(obj))
-      array.push(obj)     //emit splice?
-  }
-*/
-
-}
-
 GSet.prototype.toArray =
 GSet.prototype.get = function (path) {
   if(!arguments.length)
     return this.state
   //if path is defined, pass to members...
 }
-
-
