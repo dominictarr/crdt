@@ -39,3 +39,44 @@ test('GSet - 2', function (t) {
   t.end()
 
 })
+
+test('validate', function (t) {
+  //test a set - deleteable members.
+  //pull this into it's own thing. this will be useful.
+  var array = []
+
+  function sort () { 
+    return array.sort(function (a, b) {
+      return a.thing - b.thing
+    })
+  }
+
+  var dset = 
+  new crdt.GSet('set')
+    .on('new', function (obj) {
+      //a new object is added to the set.
+      array.push(obj.get())
+    })
+    .on('update', function (key, obj) {
+      var i
+      if(obj.__delete && ~(i = array.indexOf(obj)))
+        array.splice(i, 1)
+      else if(!obj.__delete && !~(i = array.indexOf(obj)))
+        array.push(obj) 
+    })
+
+  dset.set(['a'], {thing: 1})
+  dset.flush()
+
+  dset.set(['b'], {thing: 2})
+  dset.flush()
+
+  t.deepEqual(sort(), [{thing: 1}, {thing:2}])
+  
+  dset.set(['b'], {__delete: true})
+  dset.flush()
+
+  t.deepEqual(sort(), [{thing: 1}])
+
+  t.end() 
+})
