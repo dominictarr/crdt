@@ -69,7 +69,7 @@ Obj.prototype.update = function (update) {
     //send a message back to the source that undoes the change?
     //certainly, don't send this message on.
     //this will be considered an insignificant change. 
-    console.log('validation error', update[0])
+    console.error('validation error', update[0])
     return
   }
   //if update is -e newer than any previous update. 
