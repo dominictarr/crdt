@@ -82,7 +82,7 @@ function defFactory (id) {
 
   var set = (Array.isArray(id) && id.length > 1)
 
-  var obj = set ? new GSet(id = id[0]) : new Obj(id)
+  var obj = set ? new GSet(id = id[0]) : new Obj('' + id)
   this[id] = obj.get()
 
   return obj
@@ -105,6 +105,8 @@ function getMember (self, key) {
 
   if(Array.isArray(path)) {
     key = path[0]
+    if(!path.length)
+      throw new Error('path erros')
   }
 
   if(!self.objects[key]) {
@@ -115,15 +117,12 @@ function getMember (self, key) {
       self.emit('queue')
     }
 
-    function create () {
-      return f.call(self.state, path)
-    }
-
-    obj = create()
+    obj = f.call(self.state, path)
 
     try {
       self.emit('new', obj, self)
     } catch (e) {
+      console.error('validation:', e.message)
       //someone will have to throw away all the changes for this...
       return
     }
@@ -160,16 +159,16 @@ GSet.prototype.add = function (key, changes, val) {
     set.set.call(set, key, changes) 
   } else {
     var obj = getMember(this, key)
-    obj.set.call(obj, changes)
+    obj && obj.set.call(obj, changes)
   }
   return this
 }
 
 GSet.prototype.update = function (update) {
   update = clone(update)
-  var key = update[0].shift()
-  var obj = getMember(this, key)
-
+  var path = update[0]
+  var obj = getMember(this, path)
+  var key = path.shift()
   if(obj) { // if was not valid, this is null.
     obj.update(update)
     //update events behave different on Set to on Obj.
@@ -192,14 +191,18 @@ GSet.prototype.flush = function (obj) {
   while(queue.length) {
     //note: an object MAY NOT be a member of more than one set.
     var obj = queue.shift()
-    var update = obj.flush()
+    //if obj is a set, it will return an array of updates.
+    //
+    var flushed = obj instanceof GSet ? obj.flush() : [obj.flush()]
 
     this.emit('update', obj.id, obj.get())
 
-    if(!update) return
-    update = clone(update)
-    update[0].unshift(id)
-    updates.push(update)
+    while(flushed.length) {
+      var update = flushed.shift()
+      update = clone(update)
+      update[0].unshift(id)
+      updates.push(update)
+    }
 
   }
   
@@ -229,8 +232,19 @@ GSet.prototype.get = function (path) {
 }
 
 GSet.prototype.init = function (schema) {
+  var self = this
   for (var id in schema) {
-    (this.objects[id] = schema[id]).id = id
+    (function () {
+      var obj = self.objects[id] = schema[id]
+      self.state[id] = obj.get()
+      obj.id = id
+      obj.on('queue', 
+        function () {
+        if(~self.queue.indexOf(obj)) return
+        self.queue.push(obj)
+        self.emit('queue')
+      })
+    })()
   }
   return this
 }
