@@ -369,10 +369,82 @@ var clone = require('./utils').clone
   base class for other collection types.
 */
 
+/*
+  since I want the user to inject the factory function,
+  this is too complicated.
+
+  my brain is doing a strang thing.
+  it's thinking it would be a good idea to implement a 
+  little peer to peer relational db.
+
+IDEAS -- use events instead.
+
+If a relational database was peer to peer, what would that mean?
+
+
+1. no incremental primary keys.
+2. updates only. to delete, set a delete column to true.
+
+
+one most important thing to achive, after actually having being p2p, is a easy way to attach to UI stuff.
+
+on the one hand, the relational store seems like a natural fit. it just feels insane.
+
+it's resql -- replicated sql.
+
+there arn't any templating languages that support arbitary json, 
+so maybe there should be a fairly structured data model.
+
+new Set(id).init({
+  users: crdt.Obj().on('change', function (key, value) {
+    //register a event listeners for update here...
+    //throw if the it does not update.
+    //no, because might throw by accident.
+    //veto callback? that allows async validation.
+
+    //update the model...
+
+    veto(false) //allow this change
+    veto(true, reason)  //this was invalid
+    // ... veto basicially means to change back to an old value.
+    // also, to remove the change from histroy?
+    // this is really a security feature...
+    // will have to experiment .
+
+    this example could be currently logged in users.
+    if value, add new user.
+    var userel = $(userList).find('.'+key)
+    if !value, remove user from list...
+
+  }).on('validate', function (change, obj) {
+    // throw if not valid. -- this is better.
+    say, allow username : boolean
+    
+  }),  
+  //async validation is possible too. it would just be handled like a message that arrived late.
+  messages: new Set().on('new', function (obj, veto) {
+     //object has id. so don't need to pass key.
+     obj
+  }).on('validate', function (change, obj, usr_ctx) {
+    merge change and obj.get()
+    MUST have user: name, (which must be a valid user)
+    and text: message.
+    MAY NOT update a user context that does not own this username.
+  })
+  .set('0', {text: 'hello'})
+})
+
+
+*/
+
 function defFactory (id) {
-  var obj = new Obj(id)
+
+  var set = (Array.isArray(id) && id.length > 1)
+
+  var obj = set ? new GSet(id = id[0]) : new Obj('' + id)
   this[id] = obj.get()
-  return obj 
+
+  return obj
 }
 
 function GSet(id, state, factory) {
@@ -385,35 +457,85 @@ function GSet(id, state, factory) {
 
 GSet.prototype = new EventEmitter()
 
-/*
-  this should apply to any 
-*/
+function getMember (self, key) {
+  var f = self._factory
+  var obj
+  var path = key
+
+  if(Array.isArray(path)) {
+    key = path[0]
+    if(!path.length)
+      throw new Error('path erros')
+  }
+
+  if(!self.objects[key]) {
+
+    function enqueue () {
+      if(~self.queue.indexOf(obj)) return
+      self.queue.push(obj)
+      self.emit('queue')
+    }
+
+    obj = f.call(self.state, path)
+    console.log(obj)
+
+    try {
+      self.emit('new', obj, self)
+    } catch (e) {
+      console.error('validation:', e.message)
+      //someone will have to throw away all the changes for this...
+      return
+    }
+
+    obj = self.objects[key] = obj
+    obj.on('queue', enqueue)
+  }
+
+  return self.objects[key]
+}
 
 GSet.prototype.set =
-GSet.prototype.add = function (key, oKey, val) {
+GSet.prototype.add = function (key, changes, val) {
 
-  var self = this
-  function enqueue (obj) {
-    if(~self.queue.indexOf(obj)) return
-    self.queue.push(obj)
-    self.emit('queue')
-  }
-  var f = this._factory
-  function create (key) {
-    return f.call(self.state, key)
-  }
+  if('string' == typeof changes) {
+    var _key = changes
+    changes = {}
+    changes[_key] = val
+  }  
+  
+  if(Array.isArray(key) && key.length == 1)
+    key = key[0]
  
-  if(!this.objects[key]) {   //REPEATING THIS CODE.
-    var obj = this.objects[key] = create(key)
-    //I think I want to control state like I do for obj.
-    //HMMM. think that the factory should be responsible for creating 
-    //state
-    
-//    this.state[key] = obj.get()
-    obj.on('queue', function () { enqueue (obj) })
+  //error if cannot apply this set.
+
+  if ('object' != typeof changes ) {
+    throw new Error('cannot do that' +  JSON.stringify(changes))
   }
 
-  this.objects[key].set(oKey, val) 
+ //THIS is ugly. maybe just remove the abitily to call set(key, value)
+  if(Array.isArray(key)) { 
+    var set = getMember(this, key)
+    key.shift()
+    set.set.call(set, key, changes) 
+  } else {
+    var obj = getMember(this, key)
+    obj && obj.set.call(obj, changes)
+  }
+  return this
+}
+
+GSet.prototype.update = function (update) {
+  update = clone(update)
+  var path = update[0]
+  var obj = getMember(this, path)
+  var key = path.shift()
+  console.log('upade>>', update)
+  if(obj) { // if was not valid, this is null.
+    obj.update(update)
+    //update events behave different on Set to on Obj.
+    //it updates when any member updates.
+    this.emit('update', key, obj.get())
+  }
 }
 
 /*
@@ -430,14 +552,20 @@ GSet.prototype.flush = function (obj) {
   while(queue.length) {
     //note: an object MAY NOT be a member of more than one set.
     var obj = queue.shift()
-    var update = obj.flush()
+    //if obj is a set, it will return an array of updates.
+    //
+    var flushed = obj instanceof GSet ? obj.flush() : [obj.flush()]
 
     this.emit('update', obj.id, obj.get())
 
-    if(!update) return
-    update = clone(update)
-    update[0].unshift(id)
-    updates.push(update)
+    while(flushed.length) {
+      var update = flushed.shift()
+      console.log('>>', update)
+      update = clone(update)
+      update[0].unshift(id)
+      console.log('<<', update)
+      updates.push(update)
+    }
 
   }
   
@@ -459,51 +587,6 @@ GSet.prototype.history = function () {
   return hist
 }
 
-GSet.prototype.update = function (update) {
-  update = clone(update)
-  var key = update[0].shift()
-  var array = this.array
-  var self = this
-  var obj
-  var f = this._factory
-  function create () {
-    return f.call(self.state, key)
-  }
-
-  function enqueue (obj) {
-    if(~self.queue.indexOf(obj)) return
-    self.queue.push(obj)
-    self.emit('queue')
-  }
- 
-  if(!this.objects[key]) {
-    obj = this.objects[key] = create()
-    obj.on('queue', function () { enqueue(obj) }) 
-  }
-
-  obj = this.objects[key]
-  //does this need histroy at this level?
-  //all that can happen is creation.
-  obj.update(update)
-  this.emit('update', key, obj.get())
-
-/*
-// DELETES. move this to Set.
-//
-//
-
-  if(obj.get('__destroy')) { 
-    var i = array.indexOf(obj)
-    if(~i)    
-      array.splice(i, 1)  //emit splice?
-  } else if(obj.__destroy === false || obj.__destroy === null) {
-    if(!~array.indexOf(obj))
-      array.push(obj)     //emit splice?
-  }
-*/
-
-}
-
 GSet.prototype.toArray =
 GSet.prototype.get = function (path) {
   if(!arguments.length)
@@ -511,7 +594,23 @@ GSet.prototype.get = function (path) {
   //if path is defined, pass to members...
 }
 
-
+GSet.prototype.init = function (schema) {
+  var self = this
+  for (var id in schema) {
+    (function () {
+      var obj = self.objects[id] = schema[id]
+      self.state[id] = obj.get()
+      obj.id = id
+      obj.on('queue', 
+        function () {
+        if(~self.queue.indexOf(obj)) return
+        self.queue.push(obj)
+        self.emit('queue')
+      })
+    })()
+  }
+  return this
+}
 
 });
 
@@ -739,6 +838,7 @@ Obj.prototype.history = function () {
 
 Obj.prototype.update = function (update) {
   update    = clone(update)
+  console.log(update)
   var path  = update.shift()
   var hist  = this.hist
   var last  = hist[hist.length - 1]
@@ -748,13 +848,29 @@ Obj.prototype.update = function (update) {
   if(path.length)
     throw new Error('should not have path here:' + path)
 
-  //if update is newer than any previous update. 
+  /*
+    make this smarter?
+
+    figure out what has actually changed by applying the update?
+    or, should each update be validated itself?
+  */
+
+  try {
+    this.emit('validate', update[0], this /*, user_ctx*/)
+  } catch (e) {
+    //a change has been vetoed.
+    //send a message back to the source that undoes the change?
+    //certainly, don't send this message on.
+    //this will be considered an insignificant change. 
+    console.error('validation error', update[0])
+    return
+  }
+  //if update is -e newer than any previous update. 
   if(!last || update[1] > last[1]) { //also use sequence number
       merge(state, update[0], this._set) //this will be injectable
       hist.push(update)
   //if the update has arrived out of order.  
   } else {
-    console.log('update', update)
     hist.push(update)
     hist.sort(function (a, b) {
       return (a[1] - b[1]) || (a[2] - b[2])
@@ -763,12 +879,12 @@ Obj.prototype.update = function (update) {
       merge(state, up[0], _set)
     })
   }
+  this.emit('update', state, this, update[0])
 }
 
 Obj.prototype.set = function (key, value) {
   this.changes = this.changes || {}
   var changed = false
-  console.log(key, value, this.changes)
   if('string' === typeof key) {
     if(this.changes[key] != value) {
       changed = true
@@ -794,10 +910,19 @@ Obj.prototype.flush = function () {
   if(!this.changes) return 
   var changes = this.changes
   this.changes = null
-  var update = [[], changes, Date.now()]
+  /*
+    timestamping with milliseconds is not precise enough to generate a
+    unique timestamp every time.
+    adding a random number 0 < r < 1 will enable a total order
+    (assuming that the random number does not collide at the same time 
+    as the timestamp. very unlikely)
+    another approach would be to get sort by source id. 
+    (but that isn't implemented yet)
+
+  */
+  var update = [[], changes, Date.now() + Math.random()]
   this.update(update)
   update[0].unshift(this.id)
-  this.emit('update', changes)
   this.emit('flush', update)
   return update
 }
@@ -852,7 +977,7 @@ function createStream(set, name) {
       return a[2] - b[2]
     })
     while(hist.length)
-      queue.push(hist.shift())        
+      queue.push(hist.shift()) 
 
     set.on('flush', function (updates) {
       updates.forEach(function (e) {
@@ -882,6 +1007,11 @@ function createStream(set, name) {
     set.flush()//force a flush, will emit and append to queue
     if(!queue.length)
       return
+
+    //make sure the timestamps are in order
+    queue.sort(function (a, b) {
+      return a[2] - b[2]
+    })
 
     while(queue.length) { 
       //this is breaking stuff in tests, because references are shared
@@ -1485,25 +1615,43 @@ var bs = _bs(io.connect('http://localhost:3000'))
 CONTENT = document.createElement('div')
 CONTENT.id = 'chat'
 
-// setup crdt to update dom elements.
+messages = null
+var set = SET =
+new crdt.GSet('set').init({
+  messages: messages = new crdt.GSet()
+  .on('new', function (obj) {
 
-var set = SET = new crdt.Set('set', {}, function (key) {
-  var div = document.createElement('div')
-    var o = new crdt.Obj(key, {}, function (key, val) { 
-    console.log('update', key, val)
-    div.innerHTML = val + '\n'
-    this[key] = val
-  })
-  //this is CONTENT
-  CONTENT.appendChild(div) 
-  
-  process.nextTick(function () {
+    var div = document.createElement('div')
+    var p = document.createElement('span')
+    var a = document.createElement('a')
+
+    a.href = '#'
+    a.innerHTML = 'x'
+
+    a.onclick = function () {
+      obj.set({__delete: true})
+    }
+
+    div.appendChild(p)
+    div.appendChild(a)
+    obj.on('update', function () {
+      if(obj.get().__delete) {
+        CONTENT.removeChild(div)
+        obj.removeAllListeners('update')
+      }
+      p.innerText = JSON.stringify(obj.get())
+    })
+    setTimeout(function () {
     //scroll to bottom
-    CONTENT.scrollTop = 9999999
-  }, 10)
-
-  return o 
+      CONTENT.scrollTop = 9999999
+    }, 10)
+    CONTENT.appendChild(div)
+  })
+  ,
+  users: new crdt.Obj()
+  //track this too 
 })
+
 
 //or should I decouple this and just use events?
 //and paths?
@@ -1522,19 +1670,19 @@ window.onload = function () {
       var replace = m[2]
       //search & replace
       console.log('REPLACE:', search, 'WITH', replace)
-      var set = SET.objects
+      var set = messages.objects
       for(var k in set) {
         //oh... I threw away the state. hmm. need to do that differently.
-        var text
-        if((text = set[k].get().text) && ~text.indexOf(search)) {
+        var item = set[k].get(), text = item.text
+        if(text && ~text.indexOf(search) && !item.__delete) {
           set[k].set('text', text.split(search).join(replace))
           console.log('TEXT TO UPDATE', text)
           //set doesn't seem to work when the value was set remotely
         }
       }
-      //set.flush()
+      set.flush()
     } else 
-      SET.set(['#'+Math.random()], {text: this.value})
+      messages.set(['_'+Date.now()], {text: this.value})
     this.value = ''
   } 
   document.body.insertBefore(CONTENT, input)
