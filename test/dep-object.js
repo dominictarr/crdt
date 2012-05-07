@@ -18,9 +18,10 @@ Model.prototype.get = function (key) {
 test('dependant object', function (t) {
 
   var model = new Model()
-
-  var obj = new crdt.Obj('key', model, function (key, val) {
-    this.set(key,val)
+  var obj = new crdt.Obj('key')
+  .on('update', function (changes) {
+    for (var k in changes)
+      model.set(k, changes[k])
   })
 
   obj.set({a: 1, b: 2})
@@ -36,20 +37,15 @@ test('dependant object', function (t) {
 test('dependant set', function (t) {
   var model = []
 
-  var set = new crdt.GSet('set', model, function (key) {
-    var obj = new crdt.Obj(key)
+  var set = new crdt.GSet('set')
+  .on('new', function (obj) {
     model.push(obj.get())
-    //now you may wish to setup event listeners
-    //to update the model...
-    return obj
   })
 
   set.set(['a'], {a: 1, b: 2})
   set.set(['b'], {x: 3, y: 3})
   set.flush()
-
-  console.log(set.get())
-  
-  t.deepEqual([ {a: 1, b: 2},  {x: 3, y: 3} ], set.get())
+ 
+  t.deepEqual(model, [ {a: 1, b: 2},  {x: 3, y: 3} ])
   t.end()
 })
