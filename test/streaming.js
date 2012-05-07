@@ -1,5 +1,5 @@
 var crdt    = require('..')
-//var test    = require('tap').test
+var test    = require('tap').test
 var es      = require('event-stream')
 var assert  = require('assertions')
 var help    = require('./helpers')
@@ -8,9 +8,9 @@ var randomUpdates   = help.randomUpdates
 var clone           = help.clone
 var validateUpdates = help.validateUpdates
 
-function test (name, test) {
+/*function test (name, test) {
   exports[name] = test
-}
+}*/
 
 test('random', function (t) {
 
