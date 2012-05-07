@@ -58,6 +58,7 @@ test('validate', function (t) {
       array.push(obj.get())
     })
     .on('update', function (key, obj) {
+      console.log('!!!!!!!!!!!!!!!!',key, obj)
       var i
       if(obj.__delete && ~(i = array.indexOf(obj)))
         array.splice(i, 1)
@@ -66,15 +67,11 @@ test('validate', function (t) {
     })
 
   dset.set(['a'], {thing: 1})
-  dset.flush()
-
   dset.set(['b'], {thing: 2})
-  dset.flush()
 
   t.deepEqual(sort(), [{thing: 1}, {thing:2}])
   
   dset.set(['b'], {__delete: true})
-  dset.flush()
 
   t.deepEqual(sort(), [{thing: 1}])
 

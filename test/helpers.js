@@ -7,11 +7,12 @@ exports.validateUpdates = function (t) {
   var lastSeq
 
   return es.mapSync(function (update) {
+    console.log('UPDATE', update)
     assert.equal(update.length, 4, 'length of update')
     t.ok(Array.isArray(update[0]))
-    t.type(update[1], 'object')
-    t.type(update[2], 'number')
-    t.type(update[3], 'number')
+    t.equal(typeof update[1], 'object')
+    t.equal(typeof update[2], 'number')
+    t.equal(typeof update[3], 'number')
     if(lastTime)
       t.ok(update[2] >= lastTime)
     if(lastSeq)

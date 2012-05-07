@@ -4,8 +4,8 @@ var crdt = require('..')
 var a = require('assertions')
 var test = require('tap').test
 
-//test('simple', function (t) {
-  var t = a
+test('simple', function (t) {
+ // var t = a
   var s = new crdt.GSet('top')
   s.set(['inner', 'object'], {key: 'value'})
   s.set(['inner2', 'object2'], {key2: 'value2'})
@@ -18,14 +18,14 @@ var test = require('tap').test
     console.log(s.get())
   })//*/
   
-  var updates = s.flush()
+//  var updates = s.flush()
 
-  console.log(JSON.stringify(updates))
+//  console.log(JSON.stringify(updates))
 
-  a.has(updates,
+  /*a.has(updates,
   [ [ ['top', 'inner', 'object'], {key: 'value'}, a.isNumber]
   , [ ['top', 'inner2', 'object2'], {key2: 'value2'}, a.isNumber]
-  ]) 
+  ])*/ 
 
   console.log(s.get())
 
@@ -33,6 +33,7 @@ var test = require('tap').test
     { inner  : { object   : {key  : 'value'   } }
     , inner2 : { object2  : {key2 : 'value2'  } } 
     } )
+
 //  t.end()
 //})
 
@@ -44,3 +45,6 @@ var test = require('tap').test
     { inner  : { object   : {key  : 'value', x: 1   } }
     , inner2 : { object2  : {key2 : 'value2'  } } 
     } )
+
+  t.end()
+})

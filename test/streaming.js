@@ -1,5 +1,5 @@
 var crdt    = require('..')
-var test    = require('tap').test
+//var test    = require('tap').test
 var es      = require('event-stream')
 var assert  = require('assertions')
 var help    = require('./helpers')
@@ -7,6 +7,10 @@ var help    = require('./helpers')
 var randomUpdates   = help.randomUpdates
 var clone           = help.clone
 var validateUpdates = help.validateUpdates
+
+function test (name, test) {
+  exports[name] = test
+}
 
 test('random', function (t) {
 
@@ -89,7 +93,7 @@ test ('histroy', function (t) {
              //already sent, acient histroy.
              //however, they may still affect current state.
 
-  bs.pipe(validateUpdates(t)).pipe(as)
+  bs.pipe(validateUpdates(assert)).pipe(as)
   
   bs.flush() //this would be called in next tick
 
@@ -123,7 +127,7 @@ test ('histroy2', function (t) {
 
   randomUpdates(b)
   //not flushed yet
-  bs.pipe(validateUpdates(t)).pipe(as)
+  bs.pipe(validateUpdates(assert)).pipe(as)
   
   bs.flush() //this would be called in next tick
 
@@ -152,7 +156,7 @@ test ('histroy3', function (t) {
   //XXX difference between 'histroy' and 'random' is 
   //    the order of .pipe(..) or randomUpdates()
 
-  bs2.pipe(validateUpdates(t)).pipe(cs)
+  bs2.pipe(validateUpdates(assert)).pipe(cs)
 
   randomUpdates(b)
   bs2.flush() 
@@ -160,7 +164,7 @@ test ('histroy3', function (t) {
 
   randomUpdates(b)
   //not flushed yet
-  bs.pipe(validateUpdates(t)).pipe(as)
+  bs.pipe(validateUpdates(assert)).pipe(as)
  
   bs.flush() //this would be called in next tick
   bs2.flush()
@@ -200,9 +204,9 @@ test ('client-server', function (t) {
   //B is the Server, A and C are clients.
   //will apply updates to A, expect them to eventually propagate to C
 
-  cs.pipe(bs2).pipe(validateUpdates(t)).pipe(cs)
+  cs.pipe(bs2).pipe(validateUpdates(assert)).pipe(cs)
 
-  as.pipe(bs).pipe(validateUpdates(t)).pipe(as)
+  as.pipe(bs).pipe(validateUpdates(assert)).pipe(as)
 
   randomUpdates(a)
   as.flush() 
