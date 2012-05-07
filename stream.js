@@ -103,10 +103,10 @@ function createStream(set, name) {
     queued = false
   }
 
-  set.on('queue', function () {
-    if(queue.length) return
-    process.nextTick(s.flush)
-  })
+//  set.on('queue', function () {
+//    if(queue.length) return
+//    process.nextTick(s.flush)
+//  })
 
 /*
 ******************************
