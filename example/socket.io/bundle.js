@@ -477,7 +477,6 @@ function getMember (self, key) {
     }
 
     obj = f.call(self.state, path)
-    console.log(obj)
 
     try {
       self.emit('new', obj, self)
@@ -529,7 +528,6 @@ GSet.prototype.update = function (update) {
   var path = update[0]
   var obj = getMember(this, path)
   var key = path.shift()
-  console.log('upade>>', update)
   if(obj) { // if was not valid, this is null.
     obj.update(update)
     //update events behave different on Set to on Obj.
@@ -560,10 +558,8 @@ GSet.prototype.flush = function (obj) {
 
     while(flushed.length) {
       var update = flushed.shift()
-      console.log('>>', update)
       update = clone(update)
       update[0].unshift(id)
-      console.log('<<', update)
       updates.push(update)
     }
 
@@ -835,10 +831,39 @@ Obj.prototype.history = function () {
     return e
   })
 }
+/*
+      ~~~~~~~~~~~~~~~~~~~~~~
+        *************** ***
+        *                *
+        *  AWESOME IDEA  *
+        *                *
+        ******************
+      ~~~~~~~~~~~~~~~~~~~~~~
+
+script that shows the position of the mice of other users.
+with cool animation when they follow a link, or leave the tab.
+
+what is more social than social? collaboritave.
+
+why do people use facebook?
+
+because they want to entertain, and to be entertained.
+to enjoy inter-personal contack.
+
+facebook is tuned for profitable usage patterns.
+
+it's not tuned to improve your life.
+
+facebook knows when you break up, or start a new relationship.
+facebook knows everything about you.
+
+
+  facebook can be tuned to _ANYTHNIG_.
+
+*/
 
 Obj.prototype.update = function (update) {
   update    = clone(update)
-  console.log(update)
   var path  = update.shift()
   var hist  = this.hist
   var last  = hist[hist.length - 1]
@@ -1612,81 +1637,82 @@ var crdt    = require('crdt')
 var _bs = require('browser-stream')
 var bs = _bs(io.connect('http://localhost:3000'))
 
-CONTENT = document.createElement('div')
-CONTENT.id = 'chat'
+/*
+  tidy this example & use jQuery
+*/
+function createChat (el, stream) {
+  var input, CONTENT
+  var chat = $(el) //stick everything into the chat 
+    .append(CONTENT = $('<div class=chat_text>'))
+    .append(input   = $('<input type=text>'))
 
-messages = null
-var set = SET =
-new crdt.GSet('set').init({
-  messages: messages = new crdt.GSet()
-  .on('new', function (obj) {
+  messages = null
 
-    var div = document.createElement('div')
-    var p = document.createElement('span')
-    var a = document.createElement('a')
+  var set = SET =
+  new crdt.GSet('set').init({
+    messages: messages = new crdt.GSet()
+    .on('new', function (obj) {
+      var div, span, a
 
-    a.href = '#'
-    a.innerHTML = 'x'
+      div = 
+      $('<div class=line>')
+        .append(span = $('<span class=message>'))
+        .append(a = $('<a href=# class=del>x</a>')
+          .click(function () {
+            obj.set({__delete: true})
+          })
+        )
 
-    a.onclick = function () {
-      obj.set({__delete: true})
-    }
+      CONTENT.append(div)
 
-    div.appendChild(p)
-    div.appendChild(a)
-    obj.on('update', function () {
-      if(obj.get().__delete) {
-        CONTENT.removeChild(div)
-        obj.removeAllListeners('update')
-      }
-      p.innerText = JSON.stringify(obj.get())
+      obj.on('update', function () {
+        if(obj.get().__delete) {
+          div.remove()
+          obj.removeAllListeners('update')
+        }
+        span.text(obj.get().text)
+      })
+
+      setTimeout(function () {
+      //scroll to bottom
+        CONTENT[0].scrollTop = 9999999
+      }, 10)
+
     })
-    setTimeout(function () {
-    //scroll to bottom
-      CONTENT.scrollTop = 9999999
-    }, 10)
-    CONTENT.appendChild(div)
+    ,
+    users: new crdt.Obj()
+    //track this too 
   })
-  ,
-  users: new crdt.Obj()
-  //track this too 
-})
 
+  stream.pipe(crdt.createStream(set)).pipe(stream)
 
-//or should I decouple this and just use events?
-//and paths?
-
-var stream = crdt.createStream(set)
-
-stream.pipe(BS = bs.createStream('test')).pipe(stream)
-
-window.onload = function () {
-  var input = document.getElementById('input')
-  input.onchange = function () {
+  input.change(function () {
     //enter chat message
     var m = /s\/([^\\]+)\/(.*)/.exec(this.value)
     if(m) {
       var search = m[1]
       var replace = m[2]
       //search & replace
-      console.log('REPLACE:', search, 'WITH', replace)
       var set = messages.objects
       for(var k in set) {
         //oh... I threw away the state. hmm. need to do that differently.
         var item = set[k].get(), text = item.text
         if(text && ~text.indexOf(search) && !item.__delete) {
           set[k].set('text', text.split(search).join(replace))
-          console.log('TEXT TO UPDATE', text)
-          //set doesn't seem to work when the value was set remotely
         }
       }
       set.flush()
     } else 
       messages.set(['_'+Date.now()], {text: this.value})
     this.value = ''
-  } 
-  document.body.insertBefore(CONTENT, input)
+  })
 }
+
+
+$(function () {
+  createChat('#chat', bs.createStream('test'))    
+})
+
 
 });
 require("/client.js");
