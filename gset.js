@@ -10,96 +10,26 @@ var clone = require('./utils').clone
   base class for other collection types.
 */
 
-/*
-  since I want the user to inject the factory function,
-  this is too complicated.
-
-  my brain is doing a strang thing.
-  it's thinking it would be a good idea to implement a 
-  little peer to peer relational db.
-
-IDEAS -- use events instead.
-
-If a relational database was peer to peer, what would that mean?
-
-
-1. no incremental primary keys.
-2. updates only. to delete, set a delete column to true.
-
-
-one most important thing to achive, after actually having being p2p, is a easy way to attach to UI stuff.
-
-on the one hand, the relational store seems like a natural fit. it just feels insane.
-
-it's resql -- replicated sql.
-
-there arn't any templating languages that support arbitary json, 
-so maybe there should be a fairly structured data model.
-
-new Set(id).init({
-  users: crdt.Obj().on('change', function (key, value) {
-    //register a event listeners for update here...
-    //throw if the it does not update.
-    //no, because might throw by accident.
-    //veto callback? that allows async validation.
-
-    //update the model...
-
-    veto(false) //allow this change
-    veto(true, reason)  //this was invalid
-    // ... veto basicially means to change back to an old value.
-    // also, to remove the change from histroy?
-    // this is really a security feature...
-    // will have to experiment .
-
-    this example could be currently logged in users.
-    if value, add new user.
-    var userel = $(userList).find('.'+key)
-    if !value, remove user from list...
-
-  }).on('validate', function (change, obj) {
-    // throw if not valid. -- this is better.
-    say, allow username : boolean
-    
-  }),  
-  //async validation is possible too. it would just be handled like a message that arrived late.
-  messages: new Set().on('new', function (obj, veto) {
-     //object has id. so don't need to pass key.
-     obj
-  }).on('validate', function (change, obj, usr_ctx) {
-    merge change and obj.get()
-    MUST have user: name, (which must be a valid user)
-    and text: message.
-    MAY NOT update a user context that does not own this username.
-  })
-  .set('0', {text: 'hello'})
-})
-
-
-*/
-
-function defFactory (id) {
-
-  var set = (Array.isArray(id) && id.length > 1)
-
-  var obj = set ? new GSet(id = id[0]) : new Obj('' + id)
-  this[id] = obj.get()
-
-  return obj
-}
-
-function GSet(id, state, factory) {
+function GSet(id) {
   this.id = id
-  this.state = state || {}
+  this.state = {}
   this.objects = {}
   this.queue = []
-  this._factory = factory || defFactory
 }
 
 GSet.prototype = new EventEmitter()
 
+function createMember (state, id) {
+
+  var set = (Array.isArray(id) && id.length > 1)
+
+  var obj = set ? new GSet(id = id[0]) : new Obj('' + id)
+  state[id] = obj.get()
+
+  return obj
+}
+
 function getMember (self, key) {
-  var f = self._factory
   var obj
   var path = key
 
@@ -117,10 +47,10 @@ function getMember (self, key) {
       self.emit('queue')
     }
 
-    obj = f.call(self.state, path)
+    obj = createMember(self.state, path)
 
     try {
-      self.emit('new', obj, self)
+      self.emit('validate', obj, self)
     } catch (e) {
       console.error('validation:', e.message)
       //someone will have to throw away all the changes for this...
@@ -129,6 +59,7 @@ function getMember (self, key) {
 
     obj = self.objects[key] = obj
     obj.on('queue', enqueue)
+    self.emit('new', obj, self)
   }
 
   return self.objects[key]

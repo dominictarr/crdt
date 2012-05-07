@@ -9,28 +9,17 @@ var clone = require('./utils').clone
 //i.e. using backbone or knockout.
 
 
-function merge(to, from, set) {
+function merge(to, from) {
   for(var k in from)
-    set.call(to, k, from[k])
+    to[k] = from[k]
   return to
 }
 
-var defFactory = function (key, val) {
-    /*
-      or use 
-        self.set(key, val)
-      or
-        self[key] = self[key] ? self[key](val) : ko.observable(val)
-    */
-    this[key] = val
-  }
-
-function Obj (id, state, factory) {
+function Obj (id) {
   this.id      = id
-  this.state   = state || {}
+  this.state   = {}
   this.hist    = []
   this.changes = null
-  this._set    = factory || defFactory
 }
 
 Obj.prototype = new EventEmitter()
@@ -43,6 +32,36 @@ Obj.prototype.history = function () {
     return e
   })
 }
+/*
+      ~~~~~~~~~~~~~~~~~~~~~~
+        *************** ***
+        *                *
+        *  AWESOME IDEA  *
+        *                *
+        ******************
+      ~~~~~~~~~~~~~~~~~~~~~~
+
+script that shows the position of the mice of other users.
+with cool animation when they follow a link, or leave the tab.
+
+what is more social than social? collaboritave.
+
+why do people use facebook?
+
+because they want to entertain, and to be entertained.
+to enjoy inter-personal contack.
+
+facebook is tuned for profitable usage patterns.
+
+it's not tuned to improve your life.
+
+facebook knows when you break up, or start a new relationship.
+facebook knows everything about you.
+
+
+  facebook can be tuned to _ANYTHNIG_.
+
+*/
 
 Obj.prototype.update = function (update) {
   update    = clone(update)
@@ -50,7 +69,6 @@ Obj.prototype.update = function (update) {
   var hist  = this.hist
   var last  = hist[hist.length - 1]
   var state = this.state
-  var _set  = this._set
 
   if(path.length)
     throw new Error('should not have path here:' + path)
@@ -74,7 +92,7 @@ Obj.prototype.update = function (update) {
   }
   //if update is -e newer than any previous update. 
   if(!last || update[1] > last[1]) { //also use sequence number
-      merge(state, update[0], this._set) //this will be injectable
+      merge(state, update[0]) //this will be injectable
       hist.push(update)
   //if the update has arrived out of order.  
   } else {
@@ -83,7 +101,7 @@ Obj.prototype.update = function (update) {
       return (a[1] - b[1]) || (a[2] - b[2])
     })
     hist.forEach(function (up) {
-      merge(state, up[0], _set)
+      merge(state, up[0])
     })
   }
   this.emit('update', state, this, update[0])
