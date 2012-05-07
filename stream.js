@@ -46,10 +46,6 @@ function createStream(set, name) {
       return a[2] - b[2]
     })
 
-    console.log('################################')
-    console.log(hist)
-    console.log('################################')
-
     while(hist.length)
       queue.push(hist.shift()) 
 
@@ -92,8 +88,6 @@ function createStream(set, name) {
       //this is breaking stuff in tests, because references are shared
       //with the test
       var update = clone(queue.shift())
-      console.log(update)
-      if(Array.isArray(update[1])) throw new Error('ARRAY IN WRONG PLACE')
       if(update) {
         update[3] = sequence++ // append sequence numbers for this oregin
         s.emit('data', update)
@@ -102,11 +96,6 @@ function createStream(set, name) {
     
     queued = false
   }
-
-//  set.on('queue', function () {
-//    if(queue.length) return
-//    process.nextTick(s.flush)
-//  })
 
 /*
 ******************************
@@ -122,29 +111,8 @@ WRITES FROM OTHER NODES MUST BE WRITTEN TO ALL LISTENERS.
     var _update = clone(update)
     update[0].shift()
     set.update(update, s._id)
-
-    // now is when it's time to emit events?
-    /*
-      apply local update with set(key, value)
-      or set(obj)
-      queue changes, then call flush()
-      which adds the update to histroy and returns it.
-
-    */
-
-    //emit this so that other connections from this CRDT
-    //and emit.
-    //man, am doing a lot of this copying...
-  //  console.log('>>',_update)
-//    set.emit('written', _update, s._id)
-
     return true
   }
-
-  //need to know if an event has come from inside
-  //or outside...
-  //should it be sent, or not? 
-  //indeed, how to apply a local change?
 
   return s
 }

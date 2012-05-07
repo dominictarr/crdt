@@ -110,6 +110,17 @@ Obj.prototype.update = function (update, id) {
   this.emit('written', clone(update), id)
 }
 
+var _last, _count = 0
+function timestamp () {
+  var t = Date.now()
+  if(_last === t)
+    t += (_count++)/100000
+  else {
+    _last = t; count = 0
+  }
+  return t
+}
+
 Obj.prototype.set = function (key, value) {
   changes = {}
   var changed = false
@@ -127,7 +138,7 @@ Obj.prototype.set = function (key, value) {
     }
   }
   if(changed) {
-    var update = [[], changes, Date.now()]
+    var update = [[], changes, timestamp()]
     this.update(update)
     //this.emit('queue')
     //this.flush()
