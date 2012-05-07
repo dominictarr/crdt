@@ -8,6 +8,7 @@ var clone = require('./utils').clone
   GSet -- grow only set.
 
   base class for other collection types.
+
 */
 
 function GSet(id) {
@@ -24,6 +25,7 @@ function createMember (state, id) {
   var set = (Array.isArray(id) && id.length > 1)
 
   var obj = set ? new GSet(id = id[0]) : new Obj('' + id)
+  //change that?
   state[id] = obj.get()
 
   return obj
@@ -59,6 +61,15 @@ function getMember (self, key) {
 
     obj = self.objects[key] = obj
     obj.on('queue', enqueue)
+    obj.on('update', function (state, obj) {
+      //this is not consistent... ugly.
+      self.emit('update', obj.id, state)
+    })
+    obj.on('written', function (update, id) {
+      var u = clone(update)
+      u[0].unshift(self.id)
+      self.emit('written', u, id)
+    })
     self.emit('new', obj, self)
   }
 
@@ -83,7 +94,6 @@ GSet.prototype.add = function (key, changes, val) {
     throw new Error('cannot do that' +  JSON.stringify(changes))
   }
 
- //THIS is ugly. maybe just remove the abitily to call set(key, value)
   if(Array.isArray(key)) { 
     var set = getMember(this, key)
     key.shift()
@@ -95,16 +105,17 @@ GSet.prototype.add = function (key, changes, val) {
   return this
 }
 
-GSet.prototype.update = function (update) {
+GSet.prototype.update = function (update, id) {
   update = clone(update)
   var path = update[0]
   var obj = getMember(this, path)
   var key = path.shift()
   if(obj) { // if was not valid, this is null.
-    obj.update(update)
+    obj.update(update, id)
     //update events behave different on Set to on Obj.
     //it updates when any member updates.
-    this.emit('update', key, obj.get())
+    //this.emit('update', key, obj.get())
+    //emit update when obj emits update
   }
 }
 
@@ -114,31 +125,7 @@ GSet.prototype.update = function (update) {
 */
 
 GSet.prototype.flush = function (obj) {
-  var id = this.id
-  var updates = []
-  var queue = this.queue
-  if(!queue.length)
-    return
-  while(queue.length) {
-    //note: an object MAY NOT be a member of more than one set.
-    var obj = queue.shift()
-    //if obj is a set, it will return an array of updates.
-    //
-    var flushed = obj instanceof GSet ? obj.flush() : [obj.flush()]
-
-    this.emit('update', obj.id, obj.get())
-
-    while(flushed.length) {
-      var update = flushed.shift()
-      update = clone(update)
-      update[0].unshift(id)
-      updates.push(update)
-    }
-
-  }
-  
-  this.emit('flush', updates)
-  return updates
+  return
 }
 
 GSet.prototype.history = function () {

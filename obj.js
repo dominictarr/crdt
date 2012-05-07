@@ -63,7 +63,7 @@ facebook knows everything about you.
 
 */
 
-Obj.prototype.update = function (update) {
+Obj.prototype.update = function (update, id) {
   update    = clone(update)
   var path  = update.shift()
   var hist  = this.hist
@@ -105,26 +105,33 @@ Obj.prototype.update = function (update) {
     })
   }
   this.emit('update', state, this, update[0])
+  update = clone(update) //this made it work!
+  update.unshift([this.id])
+  this.emit('written', clone(update), id)
 }
 
 Obj.prototype.set = function (key, value) {
-  this.changes = this.changes || {}
+  changes = {}
   var changed = false
   if('string' === typeof key) {
-    if(this.changes[key] != value) {
+    if(this.state[key] != value) {
       changed = true
-      this.changes[key] = value
+      changes[key] = value
     } 
   } else {
     for (var k in key) {
-      if(this.changes[k] != key[k]) {
+      if(this.state[k] != key[k]) {
         changed = true
-        this.changes[k] = key[k]
+        changes[k] = key[k]
       }
     }
   }
-  if(changed)
-    this.emit('queue')
+  if(changed) {
+    var update = [[], changes, Date.now()]
+    this.update(update)
+    //this.emit('queue')
+    //this.flush()
+  }
 }
 
 Obj.prototype.get = function () {
@@ -132,22 +139,5 @@ Obj.prototype.get = function () {
 }
 
 Obj.prototype.flush = function () {
-  if(!this.changes) return 
-  var changes = this.changes
-  this.changes = null
-  /*
-    timestamping with milliseconds is not precise enough to generate a
-    unique timestamp every time.
-    adding a random number 0 < r < 1 will enable a total order
-    (assuming that the random number does not collide at the same time 
-    as the timestamp. very unlikely)
-    another approach would be to get sort by source id. 
-    (but that isn't implemented yet)
-
-  */
-  var update = [[], changes, Date.now() + Math.random()]
-  this.update(update)
-  update[0].unshift(this.id)
-  this.emit('flush', update)
-  return update
+  return
 }
