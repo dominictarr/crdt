@@ -16,6 +16,7 @@
   "dependencies": {
   },
   "devDependencies": {
+    "it-is": "~1.0.1",
     "event-stream": "0.9",
     "tap": "~0.2.4"
   },
