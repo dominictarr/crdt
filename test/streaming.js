@@ -12,29 +12,31 @@ var validateUpdates = help.validateUpdates
   exports[name] = test
 }*/
 
+var next = process.nextTick
+
 test('random', function (t) {
 
-  var a = new crdt.GSet('set')
-  var b = new crdt.GSet('set')
-  var as = crdt.createStream(a, 'a')
-  var bs = crdt.createStream(b, 'b')
-  bs.pipe(validateUpdates(t)).pipe(as)
+  var a = new crdt.Doc()
+  var b = new crdt.Doc()
+  var as = crdt.createStream(a)
+  var bs = crdt.createStream(b)
+
+  bs.pipe(as)
 
   randomUpdates(b)
 
-  bs.flush() //this would be called in next tick
+  next(function () {
 
-  //use regular deep equal because tap
-  //fails on key ordering.
-  //which is probably going to be different
-  //because messages may not be in order
+    //use regular deep equal because tap
+    //fails on key ordering.
+    //which is probably going to be different
+    //because messages may not be in order
 
-  var A = a.get()
-  var B = b.get()
+    assert.deepEqual(b.toJSON(), a.toJSON())
 
-  assert.deepEqual(b.get(), a.get())
+    t.end()
 
-  t.end()
+  })
 })
 
 /*
@@ -79,8 +81,8 @@ test ('histroy', function (t) {
 //then connect the pipe. 
 //the stream it expected to figure out that there is histroy to send
 //and send it so that everyone is in sync.
-  var a = new crdt.GSet('set')
-  var b = new crdt.GSet('set')
+  var a = new crdt.Doc()
+  var b = new crdt.Doc()
   var as = crdt.createStream(a)
   var bs = crdt.createStream(b)
 
@@ -89,20 +91,19 @@ test ('histroy', function (t) {
 
   randomUpdates(b)
 
-  bs.flush() //act like the updates where made ages ago.
-             //already sent, acient histroy.
-             //however, they may still affect current state.
+  next(function () {
 
-  bs.pipe(validateUpdates(assert)).pipe(as)
-  
-  bs.flush() //this would be called in next tick
+    bs.pipe(as)
+    
+    next(function () {
+      //what if there where random updates, then was flushed
+      //then more changes then flush..
 
-  //what if there where random updates, then was flushed
-  //then more changes then flush..
+      assert.deepEqual(b.toJSON(), a.toJSON())
 
-  assert.deepEqual(b.get(), a.get())
-
-  t.end()
+      t.end()
+    })
+  })
 })
 
 
@@ -111,8 +112,8 @@ test ('histroy2', function (t) {
 //then connect the pipe. 
 //the stream it expected to figure out that there is histroy to send
 //and send it so that everyone is in sync.
-  var a = new crdt.GSet('set')
-  var b = new crdt.GSet('set')
+  var a = new crdt.Doc()
+  var b = new crdt.Doc()
   var as = crdt.createStream(a, 'a')
   var bs = crdt.createStream(b, 'b')
 
@@ -134,7 +135,7 @@ test ('histroy2', function (t) {
   //what if there where random updates, then was flushed
   //then more changes then flush..
 
-  assert.deepEqual(b.get(), a.get())
+  assert.deepEqual(b.toJSON(), a.toJSON())
 
   t.end()
 })
@@ -145,9 +146,9 @@ test ('histroy3', function (t) {
 //then connect the pipe. 
 //the stream it expected to figure out that there is histroy to send
 //and send it so that everyone is in sync.
-  var a = new crdt.GSet('set')
-  var b = new crdt.GSet('set')  
-  var c = new crdt.GSet('set')
+  var a = new crdt.Doc()
+  var b = new crdt.Doc()  
+  var c = new crdt.Doc()
   var as = crdt.createStream(a, 'a')
   var bs = crdt.createStream(b, 'b')
   var bs2 = crdt.createStream(b, 'b2')
@@ -156,7 +157,7 @@ test ('histroy3', function (t) {
   //XXX difference between 'histroy' and 'random' is 
   //    the order of .pipe(..) or randomUpdates()
 
-  bs2.pipe(validateUpdates(assert)).pipe(cs)
+  bs2.pipe(cs)
 
   randomUpdates(b)
   bs2.flush() 
@@ -164,7 +165,7 @@ test ('histroy3', function (t) {
 
   randomUpdates(b)
   //not flushed yet
-  bs.pipe(validateUpdates(assert)).pipe(as)
+  bs.pipe(as)
  
   bs.flush() //this would be called in next tick
   bs2.flush()
@@ -184,17 +185,17 @@ test ('histroy3', function (t) {
 
   // the crdt will emit 'flush'.
 
-  assert.deepEqual(b.get(), a.get())
+  assert.deepEqual(b.toJSON(), a.toJSON())
 
-  assert.deepEqual(b.get(), c.get())
+  assert.deepEqual(b.toJSON(), c.toJSON())
 
   t.end()
 })
 
 test ('client-server', function (t) {
-  var a = new crdt.GSet('set')
-  var b = new crdt.GSet('set')  
-  var c = new crdt.GSet('set')
+  var a = new crdt.Doc()
+  var b = new crdt.Doc()  
+  var c = new crdt.Doc()
 
   var as = crdt.createStream(a, 'a')
   var bs = crdt.createStream(b, 'b')
@@ -214,8 +215,8 @@ test ('client-server', function (t) {
   bs2.flush()
   console.log('flushed!')
 
-  assert.deepEqual(b.get(), a.get())
-  assert.deepEqual(b.get(), c.get())
+  assert.deepEqual(b.toJSON(), a.toJSON())
+  assert.deepEqual(b.toJSON(), c.toJSON())
 
   randomUpdates(c)
 
@@ -225,8 +226,8 @@ test ('client-server', function (t) {
 
   console.log(cs.queue, bs2.queue, bs.queue, as.queue)
 
-  assert.deepEqual(b.get(), c.get())
-//  assert.deepEqual(b.get(), a.get())
+  assert.deepEqual(b.toJSON(), c.toJSON())
+//  assert.deepEqual(b.toJSON(), a.toJSON())
 
 //  randomUpdates(b)
   
@@ -250,8 +251,8 @@ test ('client-server', function (t) {
 
   // the crdt will emit 'flush'.
 
-  assert.deepEqual(b.get(), a.get())
-  assert.deepEqual(b.get(), c.get())
+  assert.deepEqual(b.toJSON(), a.toJSON())
+  assert.deepEqual(b.toJSON(), c.toJSON())
 
   t.end()
 })

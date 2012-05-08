@@ -14,9 +14,9 @@ var assert = require('assert')
 */
 
 
-var a = new crdt.Set('set')
+var a = new crdt.Doc()
 var as = crdt.createStream(a)
-var b = new crdt.Set('set')
+var b = new crdt.Doc()
 var bs = crdt.createStream(b)
 
 function rand(of) {
@@ -62,11 +62,13 @@ var server = net.createServer(function (sock) {
   var i = 0
   var timer = setInterval(function () {
     var key , val;
-    a.set(rand('abc'), key = rand('xyz'), val = rand('jkl'))
+    var change = {}
+    change[rand('xyz')] = rand('jkl') 
+    a.set(rand('abc'), change)
     //a will flush on nextTick
     if(0 >= allChanges-- )
       clearInterval(timer)
-    console.log('update', key, val)
+    console.log('update', change)
   }, 33)
 
   //  a.pipe(b).pipe(a)
@@ -75,14 +77,14 @@ toJSON(bs, 'B>').pipe(net.connect(6464)).pipe(fromJSON(bs, 'B<'))
 
   b.on('update', eventually(function () {
     try { 
-      assert.deepEqual(a.get(), b.get()) 
+      assert.deepEqual(a.toJSON(), b.toJSON())
       return allChanges <= 0
     } catch (e) {
       console.log(e.message)
       return false
     }
   }, function () {
-    console.log('EVENTUALLY; CONSISTANT!')
+    console.log('EVENTUALLY; CONSISTANT! (passed)')
     
     process.exit(0) 
   }))

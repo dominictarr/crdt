@@ -2,6 +2,18 @@
 var es      = require('event-stream')
 var assert  = require('assertions')
 
+exports.validateUpdates = function (t) {
+//  var t = assert
+  return es.mapSync(function (update) {
+    assert.equal(update.length, 4, 'length of update')
+    t.equal(typeof update[0], 'string')
+    t.equal(typeof update[1], 'object')
+    t.equal(typeof update[2], 'number')
+    t.equal(typeof update[3], 'string')
+
+    return update
+  })
+}
 /*
   here I will figure out some CRDT communication.
 */
