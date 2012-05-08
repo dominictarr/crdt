@@ -2,26 +2,6 @@
 var es      = require('event-stream')
 var assert  = require('assertions')
 
-exports.validateUpdates = function (t) {
-  var lastTime
-  var lastSeq
-
-  return es.mapSync(function (update) {
-    console.log('UPDATE', update)
-    assert.equal(update.length, 4, 'length of update')
-    t.ok(Array.isArray(update[0]))
-    t.equal(typeof update[1], 'object')
-    t.equal(typeof update[2], 'number')
-    t.equal(typeof update[3], 'number')
-    if(lastTime)
-      t.ok(update[2] >= lastTime)
-    if(lastSeq)
-      t.equal(update[3], lastSeq + 1)
-    lastTime = update[2]
-    lastSeq  = update[3]
-    return update
-  })
-}
 /*
   here I will figure out some CRDT communication.
 */
@@ -38,10 +18,17 @@ exports.randomUpdates = function (crdt, opts) {
   }
 
   var l = opts.total || 7
+  var changes = {}
 
   while (l--) {
-    crdt.set(rand(sets), rand(keys), rand(values))
+    var s = rand(sets) 
+    var ch = changes[s] = changes[s] || {}
+
+    ch[rand(keys)] = rand(values)
   }
+
+  for(var s in changes)
+    crdt.set(s, changes[s])
 }
 
 exports.clone = 
@@ -58,20 +45,20 @@ function (stream) {
 //used for example, to wait until all updates have completed.
 
 exports.eventuallyConsistent = function (a, b, test, cb) {
-  if(!cb) cb = test, test = null
+  if(!cb) { cb = test; test = function () {return true} }
   function done () {
-
     a.removeListener('update', check)
     b.removeListener('update', check)
-
     cb()
   }
 
   function check () {
     try {
       if(!test()) return
-      assert.deepEqual(a.get(), b.get())
-     done()
+      assert.deepEqual(a.history(), b.history())
+      assert.deepEqual(a.toJSON(), b.toJSON())
+      console.log('consistent')
+      done()
     } catch (e) {
       if(!/deepEqual/.test(e.message))
         throw e
