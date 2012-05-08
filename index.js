@@ -5,10 +5,14 @@ var Stream = require('stream')
 util.inherits(Row, EventEmitter)
 util.inherits(Doc, EventEmitter)
 
+exports = module.exports = Doc
+
 exports.Doc = Doc
 exports.Row = Row
 exports.createStream = createStream
 exports.sync = sync
+
+
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 function merge(to, from) {
@@ -55,7 +59,7 @@ function Row (id) {
 }
 
 Row.prototype.set = function (changes, v) {
-   if(arguments.length == 2) {
+  if(arguments.length == 2) {
     var k = changes 
     changes = {}
     changes[k] = v
@@ -96,23 +100,7 @@ function Doc (id) {
   this.id = id || '#' + Math.round(Math.random()*1000)
   this.rows = {}
   this.hist = {}
-  //this._last = 0
-  //this._count = 1
 }
-
-/*
-Doc.prototype._timestamp = function () {
-  var t = Date.now()
-  var _t = t
-  if(this._last == t)
-    _t += ((this._count++)/10000) 
-  else {
-    this._count = 1
-  }
-  this._last = t
-  return _t
-}
-*/
 
 Doc.prototype.add = function (initial) {
 
@@ -138,7 +126,7 @@ Doc.prototype._add = function (id, source) {
     doc.update(update, source)
   }
 
-  r.on('changes', track) //...
+  r.on('changes', track)
 
   this.emit('add', r)
   return r
@@ -169,7 +157,6 @@ Doc.prototype.update = function (update, source) {
  
   var id      = update[0]
   var changes = update[1]
-  var t       = update[2] 
 
   var changed = {}
 
@@ -188,7 +175,6 @@ Doc.prototype.update = function (update, source) {
 
   merge(row.state, changed)
   if(emit) this.emit('update', update, source) 
-//  row._set(changed, source)
 }
 
 Doc.prototype.history = function (id) {
@@ -219,7 +205,7 @@ Doc.prototype.toJSON = function () {
 var streams = 1
 
 function createStream (doc) {
-  var id = streams++ //this can just be a counter because it's only local
+  var id = streams++ //used locally so to prevent writing update back to their source
   var s = new Stream() 
   s.writable = s.readable = true
   var queue = []
@@ -235,7 +221,6 @@ function createStream (doc) {
   }
 
   s.pipe = function (other) {
-
     //emitting histroy must be deferred because downstream
     //may not yet exist.  
     concat(queue, doc.history()) 
@@ -256,13 +241,12 @@ function createStream (doc) {
   }
 
   s.end = function () {
+    //stream is disconnecting.
     doc.removeListener('update', onUpdate)
     s.emit('end')
-    //stream is disconnecting.
   }
 
   return s
-
 }
 
 function sync(a, b) {
