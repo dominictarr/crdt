@@ -74,3 +74,13 @@ items.
 ## validation.
 
 validation is very simple to apply 
+
+## TODO
+
+okay, got a simple example up... it's just a chat room, which doesn't depend on the strengths of CRDTs.
+... so plan is to make a playlist editor...
+
+  * sequence type, with delete.
+  * multiple sets... so that can put current users in a separate set...
+  * couple to knockout or backbone... need inplace editing. so you can have editable chat
+  * garbage collect insignificant updates.
