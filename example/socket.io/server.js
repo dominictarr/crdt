@@ -11,19 +11,9 @@ var app = connect()
 io = io.listen(app.listen(3000))
 
 
-var set = new crdt.Set('set')
+var set = new crdt.Doc()
 
 set.on('update', console.log)
-
-function toJSON (stream, name) {
-  return stream.pipe(es.log(name)).pipe(es.stringify())
-}
-
-function fromJSON(stream, name) {
-  var split = es.split()
-  split.pipe(es.log(name)).pipe(es.parse()).pipe(stream)
-  return split
-}
 
 io.sockets.on('connection', function (sock) {
 
@@ -32,8 +22,6 @@ io.sockets.on('connection', function (sock) {
   console.log(sock)
   bs.on('connection', function (s) {
     s.on('data', console.log)
-    console.log('ON CONNOCTION!!!!')
-     stream.pipe(s).pipe(stream)
+    stream.pipe(s).pipe(stream)
   })
-
 })

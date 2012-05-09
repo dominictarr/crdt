@@ -349,875 +349,374 @@ module.exports = {}
 });
 
 require.define("/node_modules/crdt/index.js", function (require, module, exports, __dirname, __filename) {
-exports.Set = 
-exports.GSet = require('./gset')
-exports.Obj = require('./obj')
-exports.createStream = require('./stream')
-
-});
-
-require.define("/node_modules/crdt/gset.js", function (require, module, exports, __dirname, __filename) {
-module.exports = GSet
-
+//index
+var util = require('util')
 var EventEmitter = require('events').EventEmitter
-var Obj = require('./obj')
-var clone = require('./utils').clone
+var Stream = require('stream')
 
-/*
-  GSet -- grow only set.
+util.inherits(Row, EventEmitter)
+util.inherits(Doc, EventEmitter)
+util.inherits(Set, EventEmitter)
 
-  base class for other collection types.
-*/
+exports = module.exports = Doc
 
-/*
-  since I want the user to inject the factory function,
-  this is too complicated.
+exports.Doc = Doc
+exports.Row = Row
+exports.createStream = createStream
+exports.sync = sync
+exports.Set  = Set
 
-  my brain is doing a strang thing.
-  it's thinking it would be a good idea to implement a 
-  little peer to peer relational db.
+//utils
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-IDEAS -- use events instead.
-
-If a relational database was peer to peer, what would that mean?
-
-
-1. no incremental primary keys.
-2. updates only. to delete, set a delete column to true.
-
-
-one most important thing to achive, after actually having being p2p, is a easy way to attach to UI stuff.
-
-on the one hand, the relational store seems like a natural fit. it just feels insane.
-
-it's resql -- replicated sql.
-
-there arn't any templating languages that support arbitary json, 
-so maybe there should be a fairly structured data model.
-
-new Set(id).init({
-  users: crdt.Obj().on('change', function (key, value) {
-    //register a event listeners for update here...
-    //throw if the it does not update.
-    //no, because might throw by accident.
-    //veto callback? that allows async validation.
-
-    //update the model...
-
-    veto(false) //allow this change
-    veto(true, reason)  //this was invalid
-    // ... veto basicially means to change back to an old value.
-    // also, to remove the change from histroy?
-    // this is really a security feature...
-    // will have to experiment .
-
-    this example could be currently logged in users.
-    if value, add new user.
-    var userel = $(userList).find('.'+key)
-    if !value, remove user from list...
-
-  }).on('validate', function (change, obj) {
-    // throw if not valid. -- this is better.
-    say, allow username : boolean
-    
-  }),  
-  //async validation is possible too. it would just be handled like a message that arrived late.
-  messages: new Set().on('new', function (obj, veto) {
-     //object has id. so don't need to pass key.
-     obj
-  }).on('validate', function (change, obj, usr_ctx) {
-    merge change and obj.get()
-    MUST have user: name, (which must be a valid user)
-    and text: message.
-    MAY NOT update a user context that does not own this username.
-  })
-  .set('0', {text: 'hello'})
-})
-
-
-*/
-
-function defFactory (id) {
-
-  var set = (Array.isArray(id) && id.length > 1)
-
-  var obj = set ? new GSet(id = id[0]) : new Obj('' + id)
-  this[id] = obj.get()
-
-  return obj
-}
-
-function GSet(id, state, factory) {
-  this.id = id
-  this.state = state || {}
-  this.objects = {}
-  this.queue = []
-  this._factory = factory || defFactory
-}
-
-GSet.prototype = new EventEmitter()
-
-function getMember (self, key) {
-  var f = self._factory
-  var obj
-  var path = key
-
-  if(Array.isArray(path)) {
-    key = path[0]
-    if(!path.length)
-      throw new Error('path erros')
-  }
-
-  if(!self.objects[key]) {
-
-    function enqueue () {
-      if(~self.queue.indexOf(obj)) return
-      self.queue.push(obj)
-      self.emit('queue')
-    }
-
-    obj = f.call(self.state, path)
-
-    try {
-      self.emit('new', obj, self)
-    } catch (e) {
-      console.error('validation:', e.message)
-      //someone will have to throw away all the changes for this...
-      return
-    }
-
-    obj = self.objects[key] = obj
-    obj.on('queue', enqueue)
-  }
-
-  return self.objects[key]
-}
-
-GSet.prototype.set =
-GSet.prototype.add = function (key, changes, val) {
-
-  if('string' == typeof changes) {
-    var _key = changes
-    changes = {}
-    changes[_key] = val
-  }  
-  
-  if(Array.isArray(key) && key.length == 1)
-    key = key[0]
- 
-  //error if cannot apply this set.
-
-  if ('object' != typeof changes ) {
-    throw new Error('cannot do that' +  JSON.stringify(changes))
-  }
-
- //THIS is ugly. maybe just remove the abitily to call set(key, value)
-  if(Array.isArray(key)) { 
-    var set = getMember(this, key)
-    key.shift()
-    set.set.call(set, key, changes) 
-  } else {
-    var obj = getMember(this, key)
-    obj && obj.set.call(obj, changes)
-  }
-  return this
-}
-
-GSet.prototype.update = function (update) {
-  update = clone(update)
-  var path = update[0]
-  var obj = getMember(this, path)
-  var key = path.shift()
-  if(obj) { // if was not valid, this is null.
-    obj.update(update)
-    //update events behave different on Set to on Obj.
-    //it updates when any member updates.
-    this.emit('update', key, obj.get())
-  }
-}
-
-/*
-  this can probably be used as the flush implementation for any
-  collection Obj
-*/
-
-GSet.prototype.flush = function (obj) {
-  var id = this.id
-  var updates = []
-  var queue = this.queue
-  if(!queue.length)
-    return
-  while(queue.length) {
-    //note: an object MAY NOT be a member of more than one set.
-    var obj = queue.shift()
-    //if obj is a set, it will return an array of updates.
-    //
-    var flushed = obj instanceof GSet ? obj.flush() : [obj.flush()]
-
-    this.emit('update', obj.id, obj.get())
-
-    while(flushed.length) {
-      var update = flushed.shift()
-      update = clone(update)
-      update[0].unshift(id)
-      updates.push(update)
-    }
-
-  }
-  
-  this.emit('flush', updates)
-  return updates
-}
-
-GSet.prototype.history = function () {
-  var hist = []
-  var objects = this.objects
-  var id = this.id
-  for(var k in objects)
-    objects[k].history().forEach(function (e) {
-      e = clone(e)
-      e[0].unshift(id)
-        
-      hist.push(e)
-    })
-  return hist
-}
-
-GSet.prototype.toArray =
-GSet.prototype.get = function (path) {
-  if(!arguments.length)
-    return this.state
-  //if path is defined, pass to members...
-}
-
-GSet.prototype.init = function (schema) {
-  var self = this
-  for (var id in schema) {
-    (function () {
-      var obj = self.objects[id] = schema[id]
-      self.state[id] = obj.get()
-      obj.id = id
-      obj.on('queue', 
-        function () {
-        if(~self.queue.indexOf(obj)) return
-        self.queue.push(obj)
-        self.emit('queue')
-      })
-    })()
-  }
-  return this
-}
-
-});
-
-require.define("events", function (require, module, exports, __dirname, __filename) {
-if (!process.EventEmitter) process.EventEmitter = function () {};
-
-var EventEmitter = exports.EventEmitter = process.EventEmitter;
-var isArray = typeof Array.isArray === 'function'
-    ? Array.isArray
-    : function (xs) {
-        return Object.prototype.toString.call(xs) === '[object Array]'
-    }
-;
-
-// By default EventEmitters will print a warning if more than
-// 10 listeners are added to it. This is a useful default which
-// helps finding memory leaks.
-//
-// Obviously not all Emitters should be limited to 10. This function allows
-// that to be increased. Set to zero for unlimited.
-var defaultMaxListeners = 10;
-EventEmitter.prototype.setMaxListeners = function(n) {
-  if (!this._events) this._events = {};
-  this._events.maxListeners = n;
-};
-
-
-EventEmitter.prototype.emit = function(type) {
-  // If there is no 'error' event listener then throw.
-  if (type === 'error') {
-    if (!this._events || !this._events.error ||
-        (isArray(this._events.error) && !this._events.error.length))
-    {
-      if (arguments[1] instanceof Error) {
-        throw arguments[1]; // Unhandled 'error' event
-      } else {
-        throw new Error("Uncaught, unspecified 'error' event.");
-      }
-      return false;
-    }
-  }
-
-  if (!this._events) return false;
-  var handler = this._events[type];
-  if (!handler) return false;
-
-  if (typeof handler == 'function') {
-    switch (arguments.length) {
-      // fast cases
-      case 1:
-        handler.call(this);
-        break;
-      case 2:
-        handler.call(this, arguments[1]);
-        break;
-      case 3:
-        handler.call(this, arguments[1], arguments[2]);
-        break;
-      // slower
-      default:
-        var args = Array.prototype.slice.call(arguments, 1);
-        handler.apply(this, args);
-    }
-    return true;
-
-  } else if (isArray(handler)) {
-    var args = Array.prototype.slice.call(arguments, 1);
-
-    var listeners = handler.slice();
-    for (var i = 0, l = listeners.length; i < l; i++) {
-      listeners[i].apply(this, args);
-    }
-    return true;
-
-  } else {
-    return false;
-  }
-};
-
-// EventEmitter is defined in src/node_events.cc
-// EventEmitter.prototype.emit() is also defined there.
-EventEmitter.prototype.addListener = function(type, listener) {
-  if ('function' !== typeof listener) {
-    throw new Error('addListener only takes instances of Function');
-  }
-
-  if (!this._events) this._events = {};
-
-  // To avoid recursion in the case that type == "newListeners"! Before
-  // adding it to the listeners, first emit "newListeners".
-  this.emit('newListener', type, listener);
-
-  if (!this._events[type]) {
-    // Optimize the case of one listener. Don't need the extra array object.
-    this._events[type] = listener;
-  } else if (isArray(this._events[type])) {
-
-    // Check for listener leak
-    if (!this._events[type].warned) {
-      var m;
-      if (this._events.maxListeners !== undefined) {
-        m = this._events.maxListeners;
-      } else {
-        m = defaultMaxListeners;
-      }
-
-      if (m && m > 0 && this._events[type].length > m) {
-        this._events[type].warned = true;
-        console.error('(node) warning: possible EventEmitter memory ' +
-                      'leak detected. %d listeners added. ' +
-                      'Use emitter.setMaxListeners() to increase limit.',
-                      this._events[type].length);
-        console.trace();
-      }
-    }
-
-    // If we've already got an array, just append.
-    this._events[type].push(listener);
-  } else {
-    // Adding the second element, need to change to array.
-    this._events[type] = [this._events[type], listener];
-  }
-
-  return this;
-};
-
-EventEmitter.prototype.on = EventEmitter.prototype.addListener;
-
-EventEmitter.prototype.once = function(type, listener) {
-  var self = this;
-  self.on(type, function g() {
-    self.removeListener(type, g);
-    listener.apply(this, arguments);
-  });
-
-  return this;
-};
-
-EventEmitter.prototype.removeListener = function(type, listener) {
-  if ('function' !== typeof listener) {
-    throw new Error('removeListener only takes instances of Function');
-  }
-
-  // does not use listeners(), so no side effect of creating _events[type]
-  if (!this._events || !this._events[type]) return this;
-
-  var list = this._events[type];
-
-  if (isArray(list)) {
-    var i = list.indexOf(listener);
-    if (i < 0) return this;
-    list.splice(i, 1);
-    if (list.length == 0)
-      delete this._events[type];
-  } else if (this._events[type] === listener) {
-    delete this._events[type];
-  }
-
-  return this;
-};
-
-EventEmitter.prototype.removeAllListeners = function(type) {
-  // does not use listeners(), so no side effect of creating _events[type]
-  if (type && this._events && this._events[type]) this._events[type] = null;
-  return this;
-};
-
-EventEmitter.prototype.listeners = function(type) {
-  if (!this._events) this._events = {};
-  if (!this._events[type]) this._events[type] = [];
-  if (!isArray(this._events[type])) {
-    this._events[type] = [this._events[type]];
-  }
-  return this._events[type];
-};
-
-});
-
-require.define("/node_modules/crdt/obj.js", function (require, module, exports, __dirname, __filename) {
-
-module.exports = Obj
-
-var EventEmitter = require('events').EventEmitter
-var clone = require('./utils').clone
-
-//this will be injectable,
-//to support different types of models.
-//i.e. using backbone or knockout.
-
-
-function merge(to, from, set) {
+function merge(to, from) {
   for(var k in from)
-    set.call(to, k, from[k])
+    to[k] = from[k]
+  return to
+}
+var _last = 0
+var _count = 1
+function timestamp () {
+  var t = Date.now()
+  var _t = t
+  if(_last == t)
+    _t += ((_count++)/10000) 
+  else _count = 1 
+  _last = t
+  return _t
+}
+
+
+function strord (a, b) {
+  return (
+    a == b ?  0
+  : a <  b ? -1
+  :           1
+  )
+}
+
+function order (a, b) {
+  return strord(a[2], b[2]) || strord(a[3], b[3])
+}
+
+function concat(to, from) {
+  while(from.length)
+    to.push(from.shift())
   return to
 }
 
-var defFactory = function (key, val) {
-    /*
-      or use 
-        self.set(key, val)
-      or
-        self[key] = self[key] ? self[key](val) : ko.observable(val)
-    */
-    this[key] = val
+//row
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+function Row (id) {
+  this.id = id
+  this.state = {id: id}
+}
+
+Row.prototype.set = function (changes, v) {
+  if(arguments.length == 2) {
+    var k = changes 
+    changes = {}
+    changes[k] = v
   }
 
-function Obj (id, state, factory) {
-  this.id      = id
-  this.state   = state || {}
-  this.hist    = []
-  this.changes = null
-  this._set    = factory || defFactory
+  if(changes.id && changes.id !== this.state.id)
+    throw new Error('id cannot be changed')
+
+  this._set(changes, 'local')  
+  return this
 }
 
-Obj.prototype = new EventEmitter()
-
-Obj.prototype.history = function () {
-  var id = this.id
-  return this.hist.map(function (e) {
-    e = clone(e)
-    e.unshift([id])
-    return e
-  })
-}
-/*
-      ~~~~~~~~~~~~~~~~~~~~~~
-        *************** ***
-        *                *
-        *  AWESOME IDEA  *
-        *                *
-        ******************
-      ~~~~~~~~~~~~~~~~~~~~~~
-
-script that shows the position of the mice of other users.
-with cool animation when they follow a link, or leave the tab.
-
-what is more social than social? collaboritave.
-
-why do people use facebook?
-
-because they want to entertain, and to be entertained.
-to enjoy inter-personal contack.
-
-facebook is tuned for profitable usage patterns.
-
-it's not tuned to improve your life.
-
-facebook knows when you break up, or start a new relationship.
-facebook knows everything about you.
-
-
-  facebook can be tuned to _ANYTHNIG_.
-
-*/
-
-Obj.prototype.update = function (update) {
-  update    = clone(update)
-  var path  = update.shift()
-  var hist  = this.hist
-  var last  = hist[hist.length - 1]
-  var state = this.state
-  var _set  = this._set
-
-  if(path.length)
-    throw new Error('should not have path here:' + path)
-
-  /*
-    make this smarter?
-
-    figure out what has actually changed by applying the update?
-    or, should each update be validated itself?
-  */
-
+Row.prototype.validate = function (changes) {
   try {
-    this.emit('validate', update[0], this /*, user_ctx*/)
+    this.emit('validate', changes)
+    return true
   } catch (e) {
-    //a change has been vetoed.
-    //send a message back to the source that undoes the change?
-    //certainly, don't send this message on.
-    //this will be considered an insignificant change. 
-    console.error('validation error', update[0])
-    return
-  }
-  //if update is -e newer than any previous update. 
-  if(!last || update[1] > last[1]) { //also use sequence number
-      merge(state, update[0], this._set) //this will be injectable
-      hist.push(update)
-  //if the update has arrived out of order.  
-  } else {
-    hist.push(update)
-    hist.sort(function (a, b) {
-      return (a[1] - b[1]) || (a[2] - b[2])
-    })
-    hist.forEach(function (up) {
-      merge(state, up[0], _set)
-    })
-  }
-  this.emit('update', state, this, update[0])
+    console.error('validation', e.message)
+    return false
+  } 
 }
 
-Obj.prototype.set = function (key, value) {
-  this.changes = this.changes || {}
-  var changed = false
-  if('string' === typeof key) {
-    if(this.changes[key] != value) {
-      changed = true
-      this.changes[key] = value
-    } 
-  } else {
-    for (var k in key) {
-      if(this.changes[k] != key[k]) {
-        changed = true
-        this.changes[k] = key[k]
-      }
-    }
-  }
-  if(changed)
-    this.emit('queue')
+Row.prototype._set = function (changes, source) {
+
+  //the change is applied by the Doc!
+  this.emit('preupdate', changes, source)
+  return this
 }
 
-Obj.prototype.get = function () {
+Row.prototype.get = function (key) {
+  if(key)
+    return this.state[key]
   return this.state
 }
 
-Obj.prototype.flush = function () {
-  if(!this.changes) return 
-  var changes = this.changes
-  this.changes = null
-  /*
-    timestamping with milliseconds is not precise enough to generate a
-    unique timestamp every time.
-    adding a random number 0 < r < 1 will enable a total order
-    (assuming that the random number does not collide at the same time 
-    as the timestamp. very unlikely)
-    another approach would be to get sort by source id. 
-    (but that isn't implemented yet)
+//doc
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-  */
-  var update = [[], changes, Date.now() + Math.random()]
-  this.update(update)
-  update[0].unshift(this.id)
-  this.emit('flush', update)
-  return update
+function Doc (id) {
+  //the id of the doc refers to the instance.
+  //that is, to the node.
+  //it's used to identify a node 
+  this.id = id || '#' + Math.round(Math.random()*1000)
+  this.rows = {}
+  this.hist = {}
+  this.sets = new EventEmitter() //for tracking membership of sets.
 }
 
-});
+Doc.prototype.add = function (initial) {
 
-require.define("/node_modules/crdt/utils.js", function (require, module, exports, __dirname, __filename) {
-exports.clone = 
-function (ary) {
-  return ary.map(function (e) {
-    return Array.isArray(e) ? exports.clone(e) : e
-  })
+  if(!initial.id)
+    throw new Error('id is required')
+  var r = this._add(initial.id, 'local')
+  r._set(initial, 'local')
+  return r
 }
 
+Doc.prototype._add = function (id, source) {
 
+  var doc = this
 
-});
+  if(this.rows[id])
+    return this.rows[id]
 
-require.define("/node_modules/crdt/stream.js", function (require, module, exports, __dirname, __filename) {
+  var r = new Row(id)
+  this.rows[id] = r
 
-var Stream = require('stream').Stream
-var crdt = require('./index')
-var utils = require('./utils')
-
-var clone = utils.clone
-
-module.exports = 
-function create (set, name) {
-  return createStream(set || new crdt.GSet('set'), name)
-}
-
-var _id = 0
-function createStream(set, name) {
-
-  if(!set)
-    throw new Error('expected a collection CRDT')
-  var s = new Stream()
-  s._id = _id ++
-  var sequence = 1
-  //s.set = seex kt
-  var queued = false
-  var queue = []
-  s.queue = queue
-  s.readable = s.writable = true
-  s.pipe = function (stream) {
-
-    var dest = Stream.prototype.pipe.call(this, stream)
-
-    //and now write the histroy!
-    var hist = set.history()
-    hist.sort(function (a, b) { 
-      return a[2] - b[2]
-    })
-    while(hist.length)
-      queue.push(hist.shift()) 
-
-    set.on('flush', function (updates) {
-      updates.forEach(function (e) {
-        queue.push(e)
-      }) 
-      process.nextTick(s.flush)
-    })
-
-  //emit data that has 
-  set.on('written', function (update, _id) {
-    if(_id == s._id) return
-    queue.push(update)
-    process.nextTick(s.flush)
-  })
-
-   //got to defer writing the histroy,
-    //because there may still be more downstream
-    //pipes that are not connected yet!
-
-    process.nextTick(s.flush)
-
-    return dest
+  function track (changes, source) {
+    var update = [r.id, changes, timestamp(), doc.id]
+    doc.update(update, source)
   }
 
-  s.flush = function () {
-    //if(!queue.length) 
-    set.flush()//force a flush, will emit and append to queue
-    if(!queue.length)
-      return
+  r.on('preupdate', track)
 
-    //make sure the timestamps are in order
-    queue.sort(function (a, b) {
-      return a[2] - b[2]
-    })
+  this.emit('add', r)
+  return r
+}
 
-    while(queue.length) { 
-      //this is breaking stuff in tests, because references are shared
-      //with the test
-      var update = clone(queue.shift())
-      if(update) {
-        update[3] = sequence++ // append sequence numbers for this oregin
-        s.emit('data', update)
-      }
-    }
-    
-    queued = false
-  }
-
-  set.on('queue', function () {
-    if(queue.length) return
-    process.nextTick(s.flush)
-  })
+Doc.prototype.set = function (id, change) {
+  var r = this._add(id, 'local')
+  r.set(change)
+}
 
 /*
-******************************
-WRITES FROM OTHER NODES MUST BE WRITTEN TO ALL LISTENERS.
+  histroy for each row is indexed by key.
+  key -> update that set that key.
 
+  so applying a change is as simple
+  as iterating over the keys in the rows hist
+  checking if the new update is more recent
+  than the hist update
+  if so, replace that keys hist.
 
-******************************
 */
 
-  s.write = function (update) {
-    // [path, time, update]
-    // hard code only one Set right now.
-    var _update = clone(update)
-    update[0].shift()
-    set.update(update)
+Doc.prototype.update = function (update, source) {
 
-    // now is when it's time to emit events?
-    /*
-      apply local update with set(key, value)
-      or set(obj)
-      queue changes, then call flush()
-      which adds the update to histroy and returns it.
+  //apply an update to a row.
+  //take into account histroy.
+  //and insert the change into the correct place.
+ 
+  var id      = update[0]
+  var changes = update[1]
 
-    */
+  var changed = {}
 
-    //emit this so that other connections from this CRDT
-    //and emit.
-    //man, am doing a lot of this copying...
-    set.emit('written', _update, s._id)
+  var row = this._add(id, source)
+  var hist = this.hist[id] = this.hist[id] || {}
+  var emit = false
 
+  if(!row.validate(changes)) return
+  
+  for(var key in changes) {
+    var value = changes[key]
+    if(!hist[key] || order(hist[key], update) < 0) {
+      hist[key] = update
+      changed[key] = changes[key]
+      emit = true 
+    }
+  }
+
+/*
+  probably, there may be mulitple sets that listen to the same key, 
+  but activate on different values...
+
+  hang on, in the mean time, I will probably only be managing n < 10 sets. 
+  at once, 
+*/
+
+  merge(row.state, changed)
+  for(var k in changed)
+    this.sets.emit(k, row, changed) 
+  
+  if(!emit) return
+
+  row.emit('update', update)
+  row.emit('changes', changes, 'local')
+
+  this.emit('update', update, source) 
+}
+
+
+Doc.prototype.history = function (id) {
+  if(!arguments.length) {
+    var h = []
+    for (var id in this.hist) {
+      concat(h, this.history(id))
+    }
+    return h.sort(order)
+  }
+
+  var h = []
+  var hist = this.hist[id]
+  for (var k in hist) {
+    if(!~h.indexOf(hist[k]))
+      h.push(hist[k])
+  }
+  return h.sort(order)
+}
+
+Doc.prototype.createSet = function (key, val) {
+  var id = key + ':' + val
+  if(this.sets[id]) return this.sets[id] 
+  return this.sets[key + ':' + val] = new Set(this, key, val)
+}
+
+Doc.prototype.toJSON = function () {
+  var j = {}
+  for (var k in this.rows)
+    j[k] = this.rows[k].state
+  return j
+}
+
+//stream
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+var streams = 1
+
+function createStream (doc) {
+  var id = streams++ //used locally so to prevent writing update back to their source
+  var s = new Stream() 
+  s.writable = s.readable = true
+  var queue = []
+
+  function enqueue() {
+    process.nextTick(s.flush)
+  }
+
+  function onUpdate (update, source) {
+    if(source === id) return
+      queue.push(update)
+    enqueue()
+  }
+
+  s.pipe = function (other) {
+    //emitting histroy must be deferred because downstream
+    //may not yet exist.  
+    concat(queue, doc.history()) 
+    enqueue()
+    doc.on('update', onUpdate)
+
+    return Stream.prototype.pipe.call(this, other)
+  }
+  
+  s.flush = function () {
+    while(queue.length)
+      s.emit('data', queue.shift())
+  }
+
+  s.write = function (data) {
+    doc.update(data, id)
     return true
   }
 
-  //need to know if an event has come from inside
-  //or outside...
-  //should it be sent, or not? 
-  //indeed, how to apply a local change?
+  s.end = function () {
+    //stream is disconnecting.
+    doc.removeListener('update', onUpdate)
+    s.emit('end')
+  }
 
   return s
 }
 
-});
-
-require.define("stream", function (require, module, exports, __dirname, __filename) {
-var events = require('events');
-var util = require('util');
-
-function Stream() {
-  events.EventEmitter.call(this);
+function sync(a, b) {
+  var as = createStream(a)
+  var bs = createStream(b)
+  return as.pipe(bs).pipe(as)
 }
-util.inherits(Stream, events.EventEmitter);
-module.exports = Stream;
-// Backwards-compat with node 0.4.x
-Stream.Stream = Stream;
 
-Stream.prototype.pipe = function(dest, options) {
-  var source = this;
+//set
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/*
+  a set is just a query.
+  could expand this to enable replicating a subset of a document.
+  that could enable massive documents that are too large to fit in memory.
+  as long as they could be partitioned.
 
-  function ondata(chunk) {
-    if (dest.writable) {
-      if (false === dest.write(chunk) && source.pause) {
-        source.pause();
-      }
+  heh, join queries? or rather, recursive queries,
+  for when rows have sets.
+
+  that is my vibe. don't make a database you have to 
+  _map_ to your application. pre-map the database.
+
+  could also specify sets like
+
+  //set of all things
+  {type: 'thing'}
+
+  //set of things with thier parts
+  { type: 'thing',
+    parts: {
+      parent_id: function (val) {return val == this.id}
     }
   }
 
-  source.on('data', ondata);
+  or use map-reduces. remember, if the the reduce is 
+  monotonic you don't have to remember each input.
+*/
 
-  function ondrain() {
-    if (source.readable && source.resume) {
-      source.resume();
-    }
-  }
+function Set(doc, key, value) {
+  var array = this._array = []
+  var set = this
 
-  dest.on('drain', ondrain);
+  //DO NOT CHANGE once you have created the set.
+  this.key = key
+  this.value = value
 
-  // If the 'end' option is not supplied, dest.end() will be called when
-  // source gets the 'end' or 'close' events.  Only dest.end() once, and
-  // only when all sources have ended.
-  if (!dest._isStdio && (!options || options.end !== false)) {
-    dest._pipeCount = dest._pipeCount || 0;
-    dest._pipeCount++;
+  doc.sets.on(key, function (row, changed) {
+    if(changed[key] !== value) return 
 
-    source.on('end', onend);
-    source.on('close', onclose);
-  }
+    array.push(row)
+    set.emit('add', row)
 
-  var didOnEnd = false;
-  function onend() {
-    if (didOnEnd) return;
-    didOnEnd = true;
+    function remove () {
+      if(row.state[key] === value) return
 
-    dest._pipeCount--;
-
-    // remove the listeners
-    cleanup();
-
-    if (dest._pipeCount > 0) {
-      // waiting for other incoming streams to end.
-      return;
+      var i = array.indexOf(row)
+      if(~i) array.splice(i, 1)
+      set.emit('remove', row)
+      row.removeListener('changes', remove)
     }
 
-    dest.end();
-  }
+    row.on('changes', remove)
+  })
+}
 
+Set.prototype.get = function () {
+  return this._array
+}
 
-  function onclose() {
-    if (didOnEnd) return;
-    didOnEnd = true;
+Set.prototype.toJSON = function () {
+  return this._array.map(function (e) {
+    return e.state
+  }).sort(function (a, b) {
+    return strord(a.id, b.id)
+  })
+}
 
-    dest._pipeCount--;
-
-    // remove the listeners
-    cleanup();
-
-    if (dest._pipeCount > 0) {
-      // waiting for other incoming streams to end.
-      return;
-    }
-
-    dest.destroy();
-  }
-
-  // don't leave dangling pipes when there are errors.
-  function onerror(er) {
-    cleanup();
-    if (this.listeners('error').length === 0) {
-      throw er; // Unhandled stream error in pipe.
-    }
-  }
-
-  source.on('error', onerror);
-  dest.on('error', onerror);
-
-  // remove all the event listeners that were added.
-  function cleanup() {
-    source.removeListener('data', ondata);
-    dest.removeListener('drain', ondrain);
-
-    source.removeListener('end', onend);
-    source.removeListener('close', onclose);
-
-    source.removeListener('error', onerror);
-    dest.removeListener('error', onerror);
-
-    source.removeListener('end', cleanup);
-    source.removeListener('close', cleanup);
-
-    dest.removeListener('end', cleanup);
-    dest.removeListener('close', cleanup);
-  }
-
-  source.on('end', cleanup);
-  source.on('close', cleanup);
-
-  dest.on('end', cleanup);
-  dest.on('close', cleanup);
-
-  dest.emit('pipe', source);
-
-  // Allow for unix-like usage: A.pipe(B).pipe(C)
-  return dest;
-};
+Set.prototype.each = 
+Set.prototype.forEach = function (iter) {
+  return this._array.forEach(iter)
+}
 
 });
 
@@ -1537,6 +1036,304 @@ exports.inherits = function(ctor, superCtor) {
 
 });
 
+require.define("events", function (require, module, exports, __dirname, __filename) {
+if (!process.EventEmitter) process.EventEmitter = function () {};
+
+var EventEmitter = exports.EventEmitter = process.EventEmitter;
+var isArray = typeof Array.isArray === 'function'
+    ? Array.isArray
+    : function (xs) {
+        return Object.prototype.toString.call(xs) === '[object Array]'
+    }
+;
+
+// By default EventEmitters will print a warning if more than
+// 10 listeners are added to it. This is a useful default which
+// helps finding memory leaks.
+//
+// Obviously not all Emitters should be limited to 10. This function allows
+// that to be increased. Set to zero for unlimited.
+var defaultMaxListeners = 10;
+EventEmitter.prototype.setMaxListeners = function(n) {
+  if (!this._events) this._events = {};
+  this._events.maxListeners = n;
+};
+
+
+EventEmitter.prototype.emit = function(type) {
+  // If there is no 'error' event listener then throw.
+  if (type === 'error') {
+    if (!this._events || !this._events.error ||
+        (isArray(this._events.error) && !this._events.error.length))
+    {
+      if (arguments[1] instanceof Error) {
+        throw arguments[1]; // Unhandled 'error' event
+      } else {
+        throw new Error("Uncaught, unspecified 'error' event.");
+      }
+      return false;
+    }
+  }
+
+  if (!this._events) return false;
+  var handler = this._events[type];
+  if (!handler) return false;
+
+  if (typeof handler == 'function') {
+    switch (arguments.length) {
+      // fast cases
+      case 1:
+        handler.call(this);
+        break;
+      case 2:
+        handler.call(this, arguments[1]);
+        break;
+      case 3:
+        handler.call(this, arguments[1], arguments[2]);
+        break;
+      // slower
+      default:
+        var args = Array.prototype.slice.call(arguments, 1);
+        handler.apply(this, args);
+    }
+    return true;
+
+  } else if (isArray(handler)) {
+    var args = Array.prototype.slice.call(arguments, 1);
+
+    var listeners = handler.slice();
+    for (var i = 0, l = listeners.length; i < l; i++) {
+      listeners[i].apply(this, args);
+    }
+    return true;
+
+  } else {
+    return false;
+  }
+};
+
+// EventEmitter is defined in src/node_events.cc
+// EventEmitter.prototype.emit() is also defined there.
+EventEmitter.prototype.addListener = function(type, listener) {
+  if ('function' !== typeof listener) {
+    throw new Error('addListener only takes instances of Function');
+  }
+
+  if (!this._events) this._events = {};
+
+  // To avoid recursion in the case that type == "newListeners"! Before
+  // adding it to the listeners, first emit "newListeners".
+  this.emit('newListener', type, listener);
+
+  if (!this._events[type]) {
+    // Optimize the case of one listener. Don't need the extra array object.
+    this._events[type] = listener;
+  } else if (isArray(this._events[type])) {
+
+    // Check for listener leak
+    if (!this._events[type].warned) {
+      var m;
+      if (this._events.maxListeners !== undefined) {
+        m = this._events.maxListeners;
+      } else {
+        m = defaultMaxListeners;
+      }
+
+      if (m && m > 0 && this._events[type].length > m) {
+        this._events[type].warned = true;
+        console.error('(node) warning: possible EventEmitter memory ' +
+                      'leak detected. %d listeners added. ' +
+                      'Use emitter.setMaxListeners() to increase limit.',
+                      this._events[type].length);
+        console.trace();
+      }
+    }
+
+    // If we've already got an array, just append.
+    this._events[type].push(listener);
+  } else {
+    // Adding the second element, need to change to array.
+    this._events[type] = [this._events[type], listener];
+  }
+
+  return this;
+};
+
+EventEmitter.prototype.on = EventEmitter.prototype.addListener;
+
+EventEmitter.prototype.once = function(type, listener) {
+  var self = this;
+  self.on(type, function g() {
+    self.removeListener(type, g);
+    listener.apply(this, arguments);
+  });
+
+  return this;
+};
+
+EventEmitter.prototype.removeListener = function(type, listener) {
+  if ('function' !== typeof listener) {
+    throw new Error('removeListener only takes instances of Function');
+  }
+
+  // does not use listeners(), so no side effect of creating _events[type]
+  if (!this._events || !this._events[type]) return this;
+
+  var list = this._events[type];
+
+  if (isArray(list)) {
+    var i = list.indexOf(listener);
+    if (i < 0) return this;
+    list.splice(i, 1);
+    if (list.length == 0)
+      delete this._events[type];
+  } else if (this._events[type] === listener) {
+    delete this._events[type];
+  }
+
+  return this;
+};
+
+EventEmitter.prototype.removeAllListeners = function(type) {
+  // does not use listeners(), so no side effect of creating _events[type]
+  if (type && this._events && this._events[type]) this._events[type] = null;
+  return this;
+};
+
+EventEmitter.prototype.listeners = function(type) {
+  if (!this._events) this._events = {};
+  if (!this._events[type]) this._events[type] = [];
+  if (!isArray(this._events[type])) {
+    this._events[type] = [this._events[type]];
+  }
+  return this._events[type];
+};
+
+});
+
+require.define("stream", function (require, module, exports, __dirname, __filename) {
+var events = require('events');
+var util = require('util');
+
+function Stream() {
+  events.EventEmitter.call(this);
+}
+util.inherits(Stream, events.EventEmitter);
+module.exports = Stream;
+// Backwards-compat with node 0.4.x
+Stream.Stream = Stream;
+
+Stream.prototype.pipe = function(dest, options) {
+  var source = this;
+
+  function ondata(chunk) {
+    if (dest.writable) {
+      if (false === dest.write(chunk) && source.pause) {
+        source.pause();
+      }
+    }
+  }
+
+  source.on('data', ondata);
+
+  function ondrain() {
+    if (source.readable && source.resume) {
+      source.resume();
+    }
+  }
+
+  dest.on('drain', ondrain);
+
+  // If the 'end' option is not supplied, dest.end() will be called when
+  // source gets the 'end' or 'close' events.  Only dest.end() once, and
+  // only when all sources have ended.
+  if (!dest._isStdio && (!options || options.end !== false)) {
+    dest._pipeCount = dest._pipeCount || 0;
+    dest._pipeCount++;
+
+    source.on('end', onend);
+    source.on('close', onclose);
+  }
+
+  var didOnEnd = false;
+  function onend() {
+    if (didOnEnd) return;
+    didOnEnd = true;
+
+    dest._pipeCount--;
+
+    // remove the listeners
+    cleanup();
+
+    if (dest._pipeCount > 0) {
+      // waiting for other incoming streams to end.
+      return;
+    }
+
+    dest.end();
+  }
+
+
+  function onclose() {
+    if (didOnEnd) return;
+    didOnEnd = true;
+
+    dest._pipeCount--;
+
+    // remove the listeners
+    cleanup();
+
+    if (dest._pipeCount > 0) {
+      // waiting for other incoming streams to end.
+      return;
+    }
+
+    dest.destroy();
+  }
+
+  // don't leave dangling pipes when there are errors.
+  function onerror(er) {
+    cleanup();
+    if (this.listeners('error').length === 0) {
+      throw er; // Unhandled stream error in pipe.
+    }
+  }
+
+  source.on('error', onerror);
+  dest.on('error', onerror);
+
+  // remove all the event listeners that were added.
+  function cleanup() {
+    source.removeListener('data', ondata);
+    dest.removeListener('drain', ondrain);
+
+    source.removeListener('end', onend);
+    source.removeListener('close', onclose);
+
+    source.removeListener('error', onerror);
+    dest.removeListener('error', onerror);
+
+    source.removeListener('end', cleanup);
+    source.removeListener('close', cleanup);
+
+    dest.removeListener('end', cleanup);
+    dest.removeListener('close', cleanup);
+  }
+
+  source.on('end', cleanup);
+  source.on('close', cleanup);
+
+  dest.on('end', cleanup);
+  dest.on('close', cleanup);
+
+  dest.emit('pipe', source);
+
+  // Allow for unix-like usage: A.pipe(B).pipe(C)
+  return dest;
+};
+
+});
+
 require.define("/node_modules/browser-stream/package.json", function (require, module, exports, __dirname, __filename) {
 module.exports = {}
 });
@@ -1633,6 +1430,7 @@ module.exports = function (sock) {
 
 require.define("/client.js", function (require, module, exports, __dirname, __filename) {
     
+
 var crdt    = require('crdt')
 var _bs = require('browser-stream')
 var bs = _bs(io.connect('http://localhost:3000'))
@@ -1648,12 +1446,12 @@ function createChat (el, stream) {
 
   messages = null
 
-  var set = SET =
-  new crdt.GSet('set').init({
-    messages: messages = new crdt.GSet()
-    .on('new', function (obj) {
-      var div, span, a
+  var set = SET = new crdt.Doc()
 
+  var messages = set.createSet('type', 'message')
+
+  messages.on('add', function (obj) {
+      var div, span, a
       div = 
       $('<div class=line>')
         .append(span = $('<span class=message>'))
@@ -1666,11 +1464,11 @@ function createChat (el, stream) {
       CONTENT.append(div)
 
       obj.on('update', function () {
-        if(obj.get().__delete) {
+        if(obj.get('__delete')) {
           div.remove()
           obj.removeAllListeners('update')
         }
-        span.text(obj.get().text)
+        span.text(obj.get('text'))
       })
 
       setTimeout(function () {
@@ -1679,10 +1477,6 @@ function createChat (el, stream) {
       }, 10)
 
     })
-    ,
-    users: new crdt.Obj()
-    //track this too 
-  })
 
   stream.pipe(crdt.createStream(set)).pipe(stream)
 
@@ -1693,24 +1487,28 @@ function createChat (el, stream) {
       var search = m[1]
       var replace = m[2]
       //search & replace
-      var set = messages.objects
-      for(var k in set) {
+      //add forEach, map, etc.
+      var set = messages.each(function (e) {
         //oh... I threw away the state. hmm. need to do that differently.
-        var item = set[k].get(), text = item.text
+        var item = e.get(), text = item.text
         if(text && ~text.indexOf(search) && !item.__delete) {
-          set[k].set('text', text.split(search).join(replace))
+          var ntext = text.split(search).join(replace)
+          console.log('set text', ntext) 
+          e.set('text', ntext)
         }
-      }
-      set.flush()
+      })
     } else 
-      messages.set(['_'+Date.now()], {text: this.value})
+      SET.set('_'+Date.now(), {text: this.value, type: 'message'})
     this.value = ''
   })
 }
 
-
 $(function () {
-  createChat('#chat', bs.createStream('test'))    
+  createChat('#chat', bs.createStream('test'))
+  //  SET = new crdt.Doc()
+  //MESSAGES = SET.createSet('type', 'message')
+  //var stream = crdt.createStream(SET)
+  //stream.pipe(bs.createStream('test')).pipe(stream)
 })
 
 

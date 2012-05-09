@@ -15,12 +15,12 @@ function createChat (el, stream) {
 
   messages = null
 
-  var set = SET =
-  new crdt.GSet('set').init({
-    messages: messages = new crdt.GSet()
-    .on('new', function (obj) {
-      var div, span, a
+  var set = SET = new crdt.Doc()
 
+  var messages = set.createSet('type', 'message')
+
+  messages.on('add', function (obj) {
+      var div, span, a
       div = 
       $('<div class=line>')
         .append(span = $('<span class=message>'))
@@ -33,11 +33,11 @@ function createChat (el, stream) {
       CONTENT.append(div)
 
       obj.on('update', function () {
-        if(obj.get().__delete) {
+        if(obj.get('__delete')) {
           div.remove()
           obj.removeAllListeners('update')
         }
-        span.text(obj.get().text)
+        span.text(obj.get('text'))
       })
 
       setTimeout(function () {
@@ -46,10 +46,6 @@ function createChat (el, stream) {
       }, 10)
 
     })
-    ,
-    users: new crdt.Obj()
-    //track this too 
-  })
 
   stream.pipe(crdt.createStream(set)).pipe(stream)
 
@@ -60,23 +56,23 @@ function createChat (el, stream) {
       var search = m[1]
       var replace = m[2]
       //search & replace
-      var set = messages.objects
-      for(var k in set) {
-        //oh... I threw away the state. hmm. need to do that differently.
-        var item = set[k].get(), text = item.text
+      messages.each(function (e) {
+        var item = e.get(), text = item.text
         if(text && ~text.indexOf(search) && !item.__delete) {
-          set[k].set('text', text.split(search).join(replace))
+          e.set('text', ntext.split(search).join(replace))
         }
-      }
-      set.flush()
+      })
     } else 
-      messages.set(['_'+Date.now()], {text: this.value})
+      SET.set('_'+Date.now(), {text: this.value, type: 'message'})
     this.value = ''
   })
 }
 
-
 $(function () {
-  createChat('#chat', bs.createStream('test'))    
+  createChat('#chat', bs.createStream('test'))
+  //  SET = new crdt.Doc()
+  //MESSAGES = SET.createSet('type', 'message')
+  //var stream = crdt.createStream(SET)
+  //stream.pipe(bs.createStream('test')).pipe(stream)
 })
 
