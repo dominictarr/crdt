@@ -1,9 +1,11 @@
+//index
 var util = require('util')
 var EventEmitter = require('events').EventEmitter
 var Stream = require('stream')
 
 util.inherits(Row, EventEmitter)
 util.inherits(Doc, EventEmitter)
+util.inherits(Set, EventEmitter)
 
 exports = module.exports = Doc
 
@@ -11,8 +13,9 @@ exports.Doc = Doc
 exports.Row = Row
 exports.createStream = createStream
 exports.sync = sync
+exports.Set  = Set
 
-
+//utils
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 function merge(to, from) {
@@ -51,6 +54,7 @@ function concat(to, from) {
   return to
 }
 
+//row
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 function Row (id) {
@@ -68,20 +72,24 @@ Row.prototype.set = function (changes, v) {
   if(changes.id && changes.id !== this.state.id)
     throw new Error('id cannot be changed')
 
-  return this._set(changes, 'local')  
+  this._set(changes, 'local')  
+  return this
+}
+
+Row.prototype.validate = function (changes) {
+  try {
+    this.emit('validate', changes)
+    return true
+  } catch (e) {
+    console.error('validation', e.message)
+    return false
+  } 
 }
 
 Row.prototype._set = function (changes, source) {
-  try {
-    this.emit('validate', changes)
-  } catch (e) {
-    console.error('validation', e.message)
-    return
-  }
-  
-  //merge(this.state, changes)  
+
   //the change is applied by the Doc!
-  this.emit('changes', changes, source)
+  this.emit('preupdate', changes, source)
   return this
 }
 
@@ -91,6 +99,7 @@ Row.prototype.get = function (key) {
   return this.state
 }
 
+//doc
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 function Doc (id) {
@@ -100,6 +109,7 @@ function Doc (id) {
   this.id = id || '#' + Math.round(Math.random()*1000)
   this.rows = {}
   this.hist = {}
+  this.sets = new EventEmitter() //for tracking membership of sets.
 }
 
 Doc.prototype.add = function (initial) {
@@ -126,7 +136,7 @@ Doc.prototype._add = function (id, source) {
     doc.update(update, source)
   }
 
-  r.on('changes', track)
+  r.on('preupdate', track)
 
   this.emit('add', r)
   return r
@@ -164,6 +174,8 @@ Doc.prototype.update = function (update, source) {
   var hist = this.hist[id] = this.hist[id] || {}
   var emit = false
 
+  if(!row.validate(changes)) return
+  
   for(var key in changes) {
     var value = changes[key]
     if(!hist[key] || order(hist[key], update) < 0) {
@@ -173,9 +185,26 @@ Doc.prototype.update = function (update, source) {
     }
   }
 
+/*
+  probably, there may be mulitple sets that listen to the same key, 
+  but activate on different values...
+
+  hang on, in the mean time, I will probably only be managing n < 10 sets. 
+  at once, 
+*/
+
   merge(row.state, changed)
-  if(emit) this.emit('update', update, source) 
+  for(var k in changed)
+    this.sets.emit(k, row, changed) 
+  
+  if(!emit) return
+
+  row.emit('update', update)
+  row.emit('changes', changes, 'local')
+
+  this.emit('update', update, source) 
 }
+
 
 Doc.prototype.history = function (id) {
   if(!arguments.length) {
@@ -195,12 +224,21 @@ Doc.prototype.history = function (id) {
   return h.sort(order)
 }
 
+Doc.prototype.createSet = function (key, val) {
+  var id = key + ':' + val
+  if(this.sets[id]) return this.sets[id] 
+  return this.sets[key + ':' + val] = new Set(this, key, val)
+}
+
 Doc.prototype.toJSON = function () {
   var j = {}
   for (var k in this.rows)
     j[k] = this.rows[k].state
   return j
 }
+
+//stream
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 var streams = 1
 
@@ -253,4 +291,78 @@ function sync(a, b) {
   var as = createStream(a)
   var bs = createStream(b)
   return as.pipe(bs).pipe(as)
+}
+
+//set
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/*
+  a set is just a query.
+  could expand this to enable replicating a subset of a document.
+  that could enable massive documents that are too large to fit in memory.
+  as long as they could be partitioned.
+
+  heh, join queries? or rather, recursive queries,
+  for when rows have sets.
+
+  that is my vibe. don't make a database you have to 
+  _map_ to your application. pre-map the database.
+
+  could also specify sets like
+
+  //set of all things
+  {type: 'thing'}
+
+  //set of things with thier parts
+  { type: 'thing',
+    parts: {
+      parent_id: function (val) {return val == this.id}
+    }
+  }
+
+  or use map-reduces. remember, if the the reduce is 
+  monotonic you don't have to remember each input.
+*/
+
+function Set(doc, key, value) {
+  var array = this._array = []
+  var set = this
+
+  //DO NOT CHANGE once you have created the set.
+  this.key = key
+  this.value = value
+
+  doc.sets.on(key, function (row, changed) {
+    if(changed[key] !== value) return 
+
+    array.push(row)
+    set.emit('add', row)
+
+    function remove () {
+      if(row.state[key] === value) return
+
+      var i = array.indexOf(row)
+      if(~i) array.splice(i, 1)
+      set.emit('remove', row)
+      row.removeListener('changes', remove)
+    }
+
+    row.on('changes', remove)
+  })
+}
+
+Set.prototype.asArray = function () {
+  return this._array
+}
+
+Set.prototype.toJSON = function () {
+  return this._array.map(function (e) {
+    return e.state
+  }).sort(function (a, b) {
+    return strord(a.id, b.id)
+  })
+}
+
+Set.prototype.each = 
+Set.prototype.forEach = function (iter) {
+  return this._array.forEach(iter)
 }
