@@ -1,5 +1,5 @@
-var GSet = require('./gset')
-var Obj  = require('./obj')
+
+var crdt = require('./')
 
 module.exports = Seq
 
@@ -56,31 +56,36 @@ function between (a, b) {
 }
 
 function sort (array) {
-  array.sort(function (a, b) {
-    console.log(a._sort, b._sort)
+  return array.sort(function (a, b) {
+    a = a.get('_sort'); b = b.get('_sort')
     return (
-      a._sort == b._sort ? 0
-    : a._sort <  b._sort ? -1
-    : 1
+      a == b ?  0
+    : a <  b ? -1
+    :           1
     )
   })
 }
 
-function Seq (id) {
-  GSet.call(this, id)
-  var array = this.array = []
-  this.on('new', function (obj) {
-    console.log('new')
-    array.push(obj.get())
-    sort(array)
-  })
-  this.on('update', function () {
-    console.log('update')
-    sort(array) 
-  })
+require('util').inherits(Seq, crdt.Set)
+
+function Seq (doc, key, val) {
+
+  crdt.Set.call(this, doc, key, val)
+
+  this.insert = function (obj, before, after) {
+    obj._sort = 
+      between(toKey(before) || '!', toKey(after) || '~') 
+    + randstr(3) //add a random tail so it's hard
+                 //to concurrently add two items with the
+                 //same sort.
+    var r = doc.set(id(obj), obj)
+    sort(this._array)
+    return r
+  }
+
 }
 
-Seq.prototype = new GSet()
+//Seq.prototype = new crdt.Set()
 
 Seq.prototype.get = function () {
   return this.array
@@ -90,7 +95,7 @@ function toKey (key) {
 
   return (
      'string' === typeof key ? key 
-  :  key instanceof Obj      ? key.get()._sort
+  :  key instanceof crdt.Row ? key.get()._sort
   :  key                     ? key._sort
   : null
   )
@@ -146,19 +151,6 @@ function id(obj) {
   )
 }
 
-Seq.prototype.insert = function (obj, before, after) {
-  obj._sort = 
-    between(toKey(before) || '!', toKey(after) || '~') 
-  + randstr(3) //add a random tail so it's hard
-               //to concurrently add two items with the
-               //same sort.
-  if(obj.__delete)
-      object.__delete = false
-
-  return this.set(id(obj), obj)
- 
-}
-
 Seq.prototype.before = function (obj, before) {
   return this.insert(obj, this.prev(before), before)
 }
@@ -168,23 +160,23 @@ Seq.prototype.after = function (obj, after) {
 }
 
 Seq.prototype.first = function () {
-  return this.array[0]
+  return this._array[0]
 }
 
 Seq.prototype.last = function () {
-  return this.array[this.array.length - 1]
+  return this._array[this._array.length - 1]
 }
 
 Seq.prototype.indexOf = function (obj) {
-  return this.array.indexOf(obj)
+  return this._array.indexOf(obj)
 }
 
 Seq.prototype.unshift = function (obj) {
-  return this.insert(obj, '!', this.first())
+  return this.insert(obj, '!', this.first() || '~')
 }
 
 Seq.prototype.push = function (obj) {
-  return this.insert(obj,  this.last(), '~') 
+  return this.insert(obj,  this.last() || '!', '~') 
 }
 
 /*
