@@ -1,12 +1,9 @@
 var crdt = require('..')
+var a = require('assertions')
 
 var doc = new crdt.Doc()
 var set = doc.createSet('type', 'thing')
 var set2 = doc.createSet('type', 'other')
-
-function logSet () {
-//  console.log(set.get())
-}
 
 function log(set) {
 
@@ -30,3 +27,13 @@ doc.add({id: 'c', type: 'thing', what: 9})
 console.log(set.toJSON())
 console.log(set2.toJSON())
 
+a.deepEqual(set.toJSON(), [
+  {id: 'b', type: 'thing', what: 5},
+  {id: 'c', type: 'thing', what: 9},
+])
+
+a.deepEqual(set2.toJSON(), [
+  {id: 'a', type: 'other', what: 7}
+])
+
+console.log('passed')
