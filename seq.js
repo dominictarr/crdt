@@ -1,5 +1,8 @@
 
-var crdt = require('./')
+var Set      = require('./set')
+var Row      = require('./row')
+var inherits = require('util').inherits
+var u        = require('./utils')
 
 module.exports = Seq
 
@@ -10,82 +13,65 @@ module.exports = Seq
 
 //return a string key that is after a, and before b.
 
-var chars =
-'!"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
-
-function randstr(l, ex) {
-  var str = ''
-  while(l--) 
-    str += chars[
-      Math.round(
-        Math.random() * 
-        (ex ? chars.length - 1 : chars.length)
-      )
-    ]
-  return str
-}
-
-function between (a, b) {
-
-  if(a === b)
-    throw new Error('a === b')
-
-  //force order
-  if(a > b) {
-    var t = b; b = a; a = t
-  }
-
-  var s = '', i = 0
-
-  //match prefixes
-  while(a[i] === b[i]) s += a[i++]
-
-  var _a = chars.indexOf(a[i])
-  var _b = chars.indexOf(b[i])
-  
-  //if the indexes are adjacent, must lengthen the
-  //key. note: P is the middle most letter.
-  if(_a + 1 === _b) 
-    s += a[i] + 'P'
-  //otherwise, append the letter that is halfway
-  //between _a and _b.
-  else
-    s += chars[Math.round((_a+_b)/2)]
-
-  return s
-}
-
 function sort (array) {
   return array.sort(function (a, b) {
-    a = a.get('_sort'); b = b.get('_sort')
-    return (
-      a == b ?  0
-    : a <  b ? -1
-    :           1
-    )
+    return u.strord(a.get('_sort'), b.get('_sort'))
   })
 }
 
-require('util').inherits(Seq, crdt.Set)
+inherits(Seq, Set)
 
 function Seq (doc, key, val) {
 
-  crdt.Set.call(this, doc, key, val)
-
+  Set.call(this, doc, key, val)
+  var seq = this
+  this.on('changes', function (row, changes) {
+    if(!changes._sort) return
+    sort(seq._array)
+    seq.emit('move', row)
+  })
   this.insert = function (obj, before, after) {
-    obj._sort = 
-      between(toKey(before) || '!', toKey(after) || '~') 
-    + randstr(3) //add a random tail so it's hard
-                 //to concurrently add two items with the
-                 //same sort.
-    var r = doc.set(id(obj), obj)
+    before = toKey(before)
+    after  = toKey(after)
+
+    if(before == after)
+      throw new Error('equal before/after')
+    /*
+      there could be a arbitary number of equal items.
+      find the last one, and nudge it across.
+
+      it's way easier if insert was passed the objects,
+      because then you have identity.
+
+      if it is just passed strings, it's best if the strings are
+      ids, not sort keys.
+
+      it will be except in push or unshift.
+      but a row should never have a _sort == ! || ~
+
+    */
+    var _sort = 
+       u.between(toKey(before) || '!', toKey(after) || '~') 
+     + u.randstr(3) //add a random tail so it's hard
+                    //to concurrently add two items with the
+                    //same sort.
+
+    var r, changes
+    if(obj instanceof Row) {
+      r = obj
+      changes = {_sort: _sort}
+      if(r.get(key) != val)
+        changes[key] = val
+      r.set(changes)
+    } else {
+      obj._sort = _sort
+      obj[key] = val
+      r = doc.set(id(obj), obj)
+    } 
     sort(this._array)
     return r
   }
-
 }
-
-//Seq.prototype = new crdt.Set()
 
 Seq.prototype.get = function () {
   return this.array
@@ -95,7 +81,7 @@ function toKey (key) {
 
   return (
      'string' === typeof key ? key 
-  :  key instanceof crdt.Row ? key.get()._sort
+  :  key instanceof Row      ? key.get()._sort
   :  key                     ? key._sort
   : null
   )
@@ -177,6 +163,18 @@ Seq.prototype.unshift = function (obj) {
 
 Seq.prototype.push = function (obj) {
   return this.insert(obj,  this.last() || '!', '~') 
+}
+
+Seq.prototype.length = function () {
+  return this._array.length
+}
+
+Seq.prototype.pop = function () {
+  return this.remove(this.last())
+}
+
+Seq.prototype.shift = function () {
+  return this.remove(this.first())
 }
 
 /*
