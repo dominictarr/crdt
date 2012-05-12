@@ -101,6 +101,33 @@ Row.prototype.get = function (key) {
 
 //doc
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/*
+  idea: instead of using a tombstone for deletes,
+  use a anti-tombstone to show something is alive.
+  breathing: count. -- updated by an authority.
+  set breathing to 0 to kill something.
+  
+  if a node has rows that have been garbage collected on the server,
+  it will be obvious from the value of breathing.
+
+  node disconnects... makes changes...
+  other nodes delete some things, which get garbage collected.
+
+  node reconnects.
+  server updates the node, but only increments _breathing for some rows.
+  
+  clearly, the nodes that do not have an upto date _breathing are either
+  dead, or where created by the node while it was offline.
+
+  would breathing need to be a vector clock?
+  
+  if the disconneded node is still updating the rows,
+  maybe it shouldn't be deleted, that is, undeleted.
+
+  may be on to something here... but this needs more thinking.
+
+  will depend on how much churn something has...
+*/
 
 function Doc (id) {
   //the id of the doc refers to the instance.
@@ -144,7 +171,7 @@ Doc.prototype._add = function (id, source) {
 
 Doc.prototype.set = function (id, change) {
   var r = this._add(id, 'local')
-  r.set(change)
+  return r.set(change)
 }
 
 /*
@@ -323,6 +350,8 @@ function sync(a, b) {
   monotonic you don't have to remember each input.
 */
 
+//TODO check if any currently existing items should be in the set. currently, one must create the set before recieving anything.
+
 function Set(doc, key, value) {
   var array = this._array = []
   var set = this
@@ -337,8 +366,8 @@ function Set(doc, key, value) {
     array.push(row)
     set.emit('add', row)
 
-    function remove () {
-      if(row.state[key] === value) return
+    function remove (_, changed) {
+      if(row.state[key] === value) return set.emit('update', row, changed)
 
       var i = array.indexOf(row)
       if(~i) array.splice(i, 1)
@@ -348,6 +377,11 @@ function Set(doc, key, value) {
 
     row.on('changes', remove)
   })
+
+  this.rm = this.remove = function (row) {
+    row = row instanceof Row ? row : doc.rows[row.id]
+    return row.set(key, null)
+  }
 }
 
 Set.prototype.asArray = function () {
@@ -358,7 +392,7 @@ Set.prototype.toJSON = function () {
   return this._array.map(function (e) {
     return e.state
   }).sort(function (a, b) {
-    return strord(a.id, b.id)
+    return strord(a._sort || a.id, b._sort || b.id)
   })
 }
 
@@ -366,3 +400,4 @@ Set.prototype.each =
 Set.prototype.forEach = function (iter) {
   return this._array.forEach(iter)
 }
+
