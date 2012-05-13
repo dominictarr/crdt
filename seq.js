@@ -21,6 +21,15 @@ function sort (array) {
 
 inherits(Seq, Set)
 
+function find (obj, iter) {
+  
+  for(var k in obj) {
+    var v = obj[k]
+    if(iter(v, k, obj)) return v
+  }
+  return null
+}
+
 function Seq (doc, key, val) {
 
   Set.call(this, doc, key, val)
@@ -28,14 +37,26 @@ function Seq (doc, key, val) {
   this.on('changes', function (row, changes) {
     if(!changes._sort) return
     sort(seq._array)
-    seq.emit('move', row)
+    //check if there is already an item with this sort key.
+    var prev = 
+    find(seq._array, function (other) {
+      return other != row && other.get('_sort') == row.get('_sort')
+    })
+    
+    if(prev) {
+      var next = seq.next(row)
+      console.log('P:', toKey(prev), toKey(next))
+      seq.insert(row, prev, seq.next(row))
+    }
+    else
+      seq.emit('move', row)
   })
   this.insert = function (obj, before, after) {
     before = toKey(before)
     after  = toKey(after)
 
-    if(before == after)
-      throw new Error('equal before/after')
+//    if(before == after)
+  //    throw new Error('equal before/after')
     /*
       there could be a arbitary number of equal items.
       find the last one, and nudge it across.
@@ -97,11 +118,11 @@ function toKey (key) {
 */
 
 function max (ary, test, wantIndex) {
-  var max = ary[0], _max = 0
-  if(ary.length < 1)
-    return
-  for (var i = 1; i < ary.length; i++)
-    if(test(max, ary[i])) { max = ary[i]; _max = i }
+  var max = null, _max = -1
+  if(!ary.length) return
+
+  for (var i = 0; i < ary.length; i++)
+    if(test(max, ary[i])) max = ary[_max = i]
   return wantIndex ? _max : max
 }
 
@@ -111,9 +132,9 @@ Seq.prototype.prev = function (key) {
   //since the list is kept in order,
   //a binary search is used.
   //think about that later
-  return max(this.array, function (M, m) {
+  return max(this._array, function (M, m) {
     if(toKey(m) < key)
-      return toKey(m) > toKey(M)
+      return M ? toKey(m) > toKey(M) : true
   })
 }
 
@@ -123,9 +144,9 @@ Seq.prototype.next = function (key) {
   //since the list is kept in order,
   //a binary search is used.
   //think about that later
-  return max(this.array, function (M, m) {
+  return max(this._array, function (M, m) {
     if(toKey(m) > key)
-      return toKey(m) < toKey(M)
+      return M ? toKey(m) < toKey(M) : true
   })
 }
 
