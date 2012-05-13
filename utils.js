@@ -30,7 +30,7 @@ function randstr(l) {
 function between (a, b) {
 
   if(a === b)
-    throw new Error('a === b')
+    throw new Error(a + ' === ' + b)
 
   //force order
   if(a > b) {
