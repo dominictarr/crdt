@@ -41,6 +41,7 @@ module.exports = Set
 
 function Set(doc, key, value) {
   var array = this._array = []
+  var rows = this.rows =  {}
   var set = this
 
   //DO NOT CHANGE once you have created the set.
@@ -51,6 +52,7 @@ function Set(doc, key, value) {
     if(changed[key] !== value) return 
 
     array.push(row)
+    rows[row.id] = row
     set.emit('add', row)
 
     function remove (_, changed) {
@@ -58,6 +60,7 @@ function Set(doc, key, value) {
         return set.emit('changes', row, changed)
       var i = array.indexOf(row)
       if(~i) array.splice(i, 1)
+      delete rows[row.id]
       set.emit('remove', row)
       row.removeListener('changes', remove)
     }
