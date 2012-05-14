@@ -6,13 +6,6 @@ var u        = require('./utils')
 
 module.exports = Seq
 
-/*
-  inherit from gset because seq will need a different
-  `remove` implementation to set.
-*/
-
-//return a string key that is after a, and before b.
-
 function sort (array) {
   return array.sort(function (a, b) {
     return u.strord(a.get('_sort'), b.get('_sort'))
@@ -42,35 +35,24 @@ function Seq (doc, key, val) {
     find(seq._array, function (other) {
       return other != row && other.get('_sort') == row.get('_sort')
     })
-    
-    if(prev) {
-      var next = seq.next(row)
-      console.log('P:', toKey(prev), toKey(next))
-      seq.insert(row, prev, seq.next(row))
-    }
+
+    //nudge it forward if it has the same key.    
+    if(prev)
+      seq.insert(row, prev, seq.next(row)) 
     else
       seq.emit('move', row)
   })
+  function get(id) {
+    return seq.rows[id]
+  }
   this.insert = function (obj, before, after) {
-    before = toKey(before)
-    after  = toKey(after)
 
-//    if(before == after)
-  //    throw new Error('equal before/after')
-    /*
-      there could be a arbitary number of equal items.
-      find the last one, and nudge it across.
+    before = toKey(get(before) || before || '!')
+    after  = toKey(get(after)  || after  || '~')
 
-      it's way easier if insert was passed the objects,
-      because then you have identity.
+    if('string'  === typeof obj)
+      obj = doc.rows[obj]
 
-      if it is just passed strings, it's best if the strings are
-      ids, not sort keys.
-
-      it will be except in push or unshift.
-      but a row should never have a _sort == ! || ~
-
-    */
     var _sort = 
        u.between(toKey(before) || '!', toKey(after) || '~') 
      + u.randstr(3) //add a random tail so it's hard
@@ -127,7 +109,7 @@ function max (ary, test, wantIndex) {
 }
 
 Seq.prototype.prev = function (key) {
-  key = toKey(key)
+  key = toKey(this.rows[key] || key || '~')
   //find the greatest item that is less than `key`.
   //since the list is kept in order,
   //a binary search is used.
@@ -139,11 +121,7 @@ Seq.prototype.prev = function (key) {
 }
 
 Seq.prototype.next = function (key) {
-  key = toKey(key)
-  //find the greatest item that is less than `key`.
-  //since the list is kept in order,
-  //a binary search is used.
-  //think about that later
+  key = toKey(this.rows[key] || key || '!')
   return max(this._array, function (M, m) {
     if(toKey(m) > key)
       return M ? toKey(m) < toKey(M) : true
@@ -159,11 +137,14 @@ function id(obj) {
 }
 
 Seq.prototype.before = function (obj, before) {
-  return this.insert(obj, this.prev(before), before)
+  if(!before) return this.push(obj)
+  return this.insert(obj, this.prev(before) || '!', before)
 }
 
 Seq.prototype.after = function (obj, after) {
-  return this.insert(obj, after, this.next(after))
+  if(!after) 
+    return this.unshift(obj)
+  return this.insert(obj, after, this.next(after) || '!')
 }
 
 Seq.prototype.first = function () {
@@ -175,7 +156,11 @@ Seq.prototype.last = function () {
 }
 
 Seq.prototype.indexOf = function (obj) {
-  return this._array.indexOf(obj)
+  return this._array.indexOf('string' == typeof obj ? this.rows[obj] : obj)
+}
+
+Seq.prototype.at = function (i) {
+  return this._array[i]
 }
 
 Seq.prototype.unshift = function (obj) {
@@ -198,17 +183,3 @@ Seq.prototype.shift = function () {
   return this.remove(this.first())
 }
 
-/*
-  how will I sync this to a array in UI?
-  will need to emit something that the ui style can handle
-  or maybe slice events?
-
-  hooking onto an update event,
-  it will be necessary to calc the change in index.
-  
-  another way, just update the value, and resort the 
-  array. that may not be right for UI elements.
-
-  ah, well, you can see the index it has,
-  and the index it should have, and then move it.
-*/
