@@ -21,7 +21,7 @@ setTimeout(function () {
 }, Math.random()*10)
 
 var c = 100
-
+exports.test = function (t) {
 help.eventuallyConsistent(doc, hoc
 , function () { 
     return c <= 0 && piped
@@ -30,6 +30,7 @@ help.eventuallyConsistent(doc, hoc
     a.deepEqual(doc.history(), hoc.history())
     a.deepEqual(doc.toJSON(), hoc.toJSON())
     consistent = true
+    t.end()
   }
 )
 
@@ -48,5 +49,6 @@ process.on('exit', function () {
   it(hoc.history()).has(doc.history())
   a.deepEqual(doc.toJSON(), hoc.toJSON())
   it(consistent).ok()
-  console.log('PASSED')
 })
+
+}

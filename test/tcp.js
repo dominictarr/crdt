@@ -13,7 +13,6 @@ var assert = require('assert')
   (those are the two bugs I discovered writing this)
 */
 
-
 var a = new crdt.Doc()
 var as = crdt.createStream(a)
 var b = new crdt.Doc()
@@ -48,6 +47,9 @@ function eventually(test, cb) {
 var allChanges = 10
 
 //connect thourgh tcp
+
+exports.test = function (t) {
+
 var server = net.createServer(function (sock) {
   toJSON(as, 'A>').pipe(sock).pipe(fromJSON(as, 'A<'))
 
@@ -86,11 +88,14 @@ toJSON(bs, 'B>').pipe(net.connect(6464)).pipe(fromJSON(bs, 'B<'))
   }, function () {
     console.log('EVENTUALLY; CONSISTANT! (passed)')
     
-    process.exit(0) 
+    t.end()
+    process.exit(0)
   }))
 
 })
 
+
+}
 /*
 net.createServer(function (sock) {
   sock.write('hello')

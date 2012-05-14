@@ -20,63 +20,65 @@ function validateNextPrev(seq) {
   })
 }
 
-function go () {
-  var doc = new crdt.Doc()
-  var seq = new Seq(doc, 'type', 'thing')
+exports['simple'] = function (t) {
 
-  /*seq.on('move', function (row) {
-    console.log('MOVE', row.toJSON(), seq.indexOf(row))
-  })*/
+  function go () {
+    var doc = new crdt.Doc()
+    var seq = new Seq(doc, 'type', 'thing')
 
-  var A = seq.push({id: 'a', type: 'thing', what: 3})
-  var B = seq.push({id: 'b', type: 'thing', what: 4})
-  var C = seq.unshift({id: 'c', type: 'thing', what: 2})
+    /*seq.on('move', function (row) {
+      console.log('MOVE', row.toJSON(), seq.indexOf(row))
+    })*/
 
-  a.equal(seq.first(), C)
-  a.equal(seq.last(),  B)
-  a.equal(seq.indexOf(id(A)), 1)
+    var A = seq.push({id: 'a', type: 'thing', what: 3})
+    var B = seq.push({id: 'b', type: 'thing', what: 4})
+    var C = seq.unshift({id: 'c', type: 'thing', what: 2})
 
-  seq.rm({id: 'c'})
-  a.equal(seq.first(), A)
+    a.equal(seq.first(), C)
+    a.equal(seq.last(),  B)
+    a.equal(seq.indexOf(id(A)), 1)
 
-  console.log(seq.toJSON())
-  seq.push(C)
+    seq.rm({id: 'c'})
+    a.equal(seq.first(), A)
 
-  a.strictEqual(seq.last().id,  C.id)
+    console.log(seq.toJSON())
+    seq.push(C)
 
-  var _C = seq.pop()
+    a.strictEqual(seq.last().id,  C.id)
 
-  a.strictEqual(_C, C)
-  try {
-  a.equal(seq.length(), 2)
-  } catch (e) {
-    console.error(doc.history())
-    throw e
-  }
-  var _A = seq.shift()
+    var _C = seq.pop()
 
-  a.strictEqual(_A, A)
-  a.equal(seq.length(), 1)
+    a.strictEqual(_C, C)
+    try {
+    a.equal(seq.length(), 2)
+    } catch (e) {
+      console.error(doc.history())
+      throw e
+    }
+    var _A = seq.shift()
 
-  /*
-    if two users insert a item into the same place concurrently
-    it will get the same sort.
-    in that case it should be sorted by the timestamp that the _sort
-    was updated.
+    a.strictEqual(_A, A)
+    a.equal(seq.length(), 1)
 
-    if you try to insert an item between two items with equal
-    _sort, it is necessary to nugde them apart... 
-  */
+    /*
+      if two users insert a item into the same place concurrently
+      it will get the same sort.
+      in that case it should be sorted by the timestamp that the _sort
+      was updated.
 
-} 
-//was getting intermittent failures,
-//so run this test heaps, to catch it.
-var l = 122
-while (l--)
-  go()
+      if you try to insert an item between two items with equal
+      _sort, it is necessary to nugde them apart... 
+    */
 
-
-;(function () {
+  } 
+  //was getting intermittent failures,
+  //so run this test heaps, to catch it.
+  var l = 122
+  while (l--)
+    go()
+  t.end()
+}
+exports['push'] = function (t) {
    var doc = new crdt.Doc()
   var seq = new Seq(doc, 'type', 'thing')
 
@@ -98,10 +100,11 @@ while (l--)
   a.equal(seq.prev(id(C)), B)
 
   validateNextPrev(seq)
-})()
 
-function collision () {
-  console.log('COLLISION')
+  t.end()
+}
+
+exports['collision'] = function (t) {
 
   var doc = new crdt.Doc()
   var seq = new Seq(doc, 'type', 'thing')
@@ -120,9 +123,8 @@ function collision () {
 
   var D = seq.insert({id: 'd', type: 'thing', what: 6}, A, C)
 
+  t.end()
 }
-
-collision()
 
 /*
   insert before.

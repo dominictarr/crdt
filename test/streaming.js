@@ -1,5 +1,4 @@
 var crdt    = require('..')
-var test    = require('tap').test
 var es      = require('event-stream')
 var assert  = require('assertions')
 var help    = require('./helpers')
@@ -13,6 +12,10 @@ var validateUpdates = help.validateUpdates
 }*/
 
 var next = process.nextTick
+
+function test(n,t) {
+  exports[n] = t
+}
 
 test('random', function (t) {
 

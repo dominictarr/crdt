@@ -18,6 +18,8 @@ var hs = crdt.sync(doc, loc)
 
 var next = process.nextTick
 
+exports.test = function (t) {
+
 doc.add({id: 'abc', hello: 3})
 
 next(function () {
@@ -36,7 +38,9 @@ next(function () {
     
     next(function () { 
       a.deepEqual(loc.toJSON(), doc.toJSON())
-      console.log('PASSED')
+      t.end()
     })
   })
 })
+
+}
