@@ -3,6 +3,7 @@
   <head>
     <script src=socket.io/socket.io.js></script>
     <script src=jquery.js></script>
+    <script src=jquery-ui.js></script>
     <script src=bundle.js></script>
   <style>
     #chat .chat_text {
@@ -20,10 +21,16 @@
     }
     #chat .line:hover .del {
       visibility: visible;
-    }    
+    }
+    .sortable {
+      border: solid 1px;
+      margin: 5px;
+      padding: 5px;
+    }
   </style>
   </head>
   <body>
   <div id=chat></div>
+  <div id=sets></div>
   </body> 
 </html>

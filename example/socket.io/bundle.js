@@ -350,373 +350,25 @@ module.exports = {}
 
 require.define("/node_modules/crdt/index.js", function (require, module, exports, __dirname, __filename) {
 //index
-var util = require('util')
+var inherits     = require('util').inherits
 var EventEmitter = require('events').EventEmitter
-var Stream = require('stream')
+var u            = require('./utils')
 
-util.inherits(Row, EventEmitter)
-util.inherits(Doc, EventEmitter)
-util.inherits(Set, EventEmitter)
+exports = module.exports = require('./doc')
+exports.Row              = require('./row')
+exports.createStream     = require('./stream')
+exports.sync             = sync
+exports.Set              = require('./set')
+exports.Seq              = require('./seq')
 
-exports = module.exports = Doc
-
-exports.Doc = Doc
-exports.Row = Row
-exports.createStream = createStream
-exports.sync = sync
-exports.Set  = Set
-
-//utils
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-function merge(to, from) {
-  for(var k in from)
-    to[k] = from[k]
-  return to
-}
-var _last = 0
-var _count = 1
-function timestamp () {
-  var t = Date.now()
-  var _t = t
-  if(_last == t)
-    _t += ((_count++)/10000) 
-  else _count = 1 
-  _last = t
-  return _t
-}
-
-
-function strord (a, b) {
-  return (
-    a == b ?  0
-  : a <  b ? -1
-  :           1
-  )
-}
-
-function order (a, b) {
-  return strord(a[2], b[2]) || strord(a[3], b[3])
-}
-
-function concat(to, from) {
-  while(from.length)
-    to.push(from.shift())
-  return to
-}
-
-//row
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-function Row (id) {
-  this.id = id
-  this.state = {id: id}
-}
-
-Row.prototype.set = function (changes, v) {
-  if(arguments.length == 2) {
-    var k = changes 
-    changes = {}
-    changes[k] = v
-  }
-
-  if(changes.id && changes.id !== this.state.id)
-    throw new Error('id cannot be changed')
-
-  this._set(changes, 'local')  
-  return this
-}
-
-Row.prototype.validate = function (changes) {
-  try {
-    this.emit('validate', changes)
-    return true
-  } catch (e) {
-    console.error('validation', e.message)
-    return false
-  } 
-}
-
-Row.prototype._set = function (changes, source) {
-
-  //the change is applied by the Doc!
-  this.emit('preupdate', changes, source)
-  return this
-}
-
-Row.prototype.get = function (key) {
-  if(key)
-    return this.state[key]
-  return this.state
-}
-
-//doc
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-function Doc (id) {
-  //the id of the doc refers to the instance.
-  //that is, to the node.
-  //it's used to identify a node 
-  this.id = id || '#' + Math.round(Math.random()*1000)
-  this.rows = {}
-  this.hist = {}
-  this.sets = new EventEmitter() //for tracking membership of sets.
-}
-
-Doc.prototype.add = function (initial) {
-
-  if(!initial.id)
-    throw new Error('id is required')
-  var r = this._add(initial.id, 'local')
-  r._set(initial, 'local')
-  return r
-}
-
-Doc.prototype._add = function (id, source) {
-
-  var doc = this
-
-  if(this.rows[id])
-    return this.rows[id]
-
-  var r = new Row(id)
-  this.rows[id] = r
-
-  function track (changes, source) {
-    var update = [r.id, changes, timestamp(), doc.id]
-    doc.update(update, source)
-  }
-
-  r.on('preupdate', track)
-
-  this.emit('add', r)
-  return r
-}
-
-Doc.prototype.set = function (id, change) {
-  var r = this._add(id, 'local')
-  r.set(change)
-}
-
-/*
-  histroy for each row is indexed by key.
-  key -> update that set that key.
-
-  so applying a change is as simple
-  as iterating over the keys in the rows hist
-  checking if the new update is more recent
-  than the hist update
-  if so, replace that keys hist.
-
-*/
-
-Doc.prototype.update = function (update, source) {
-
-  //apply an update to a row.
-  //take into account histroy.
-  //and insert the change into the correct place.
- 
-  var id      = update[0]
-  var changes = update[1]
-
-  var changed = {}
-
-  var row = this._add(id, source)
-  var hist = this.hist[id] = this.hist[id] || {}
-  var emit = false
-
-  if(!row.validate(changes)) return
-  
-  for(var key in changes) {
-    var value = changes[key]
-    if(!hist[key] || order(hist[key], update) < 0) {
-      hist[key] = update
-      changed[key] = changes[key]
-      emit = true 
-    }
-  }
-
-/*
-  probably, there may be mulitple sets that listen to the same key, 
-  but activate on different values...
-
-  hang on, in the mean time, I will probably only be managing n < 10 sets. 
-  at once, 
-*/
-
-  merge(row.state, changed)
-  for(var k in changed)
-    this.sets.emit(k, row, changed) 
-  
-  if(!emit) return
-
-  row.emit('update', update)
-  row.emit('changes', changes, 'local')
-
-  this.emit('update', update, source) 
-}
-
-
-Doc.prototype.history = function (id) {
-  if(!arguments.length) {
-    var h = []
-    for (var id in this.hist) {
-      concat(h, this.history(id))
-    }
-    return h.sort(order)
-  }
-
-  var h = []
-  var hist = this.hist[id]
-  for (var k in hist) {
-    if(!~h.indexOf(hist[k]))
-      h.push(hist[k])
-  }
-  return h.sort(order)
-}
-
-Doc.prototype.createSet = function (key, val) {
-  var id = key + ':' + val
-  if(this.sets[id]) return this.sets[id] 
-  return this.sets[key + ':' + val] = new Set(this, key, val)
-}
-
-Doc.prototype.toJSON = function () {
-  var j = {}
-  for (var k in this.rows)
-    j[k] = this.rows[k].state
-  return j
-}
-
-//stream
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-var streams = 1
-
-function createStream (doc) {
-  var id = streams++ //used locally so to prevent writing update back to their source
-  var s = new Stream() 
-  s.writable = s.readable = true
-  var queue = []
-
-  function enqueue() {
-    process.nextTick(s.flush)
-  }
-
-  function onUpdate (update, source) {
-    if(source === id) return
-      queue.push(update)
-    enqueue()
-  }
-
-  s.pipe = function (other) {
-    //emitting histroy must be deferred because downstream
-    //may not yet exist.  
-    concat(queue, doc.history()) 
-    enqueue()
-    doc.on('update', onUpdate)
-
-    return Stream.prototype.pipe.call(this, other)
-  }
-  
-  s.flush = function () {
-    while(queue.length)
-      s.emit('data', queue.shift())
-  }
-
-  s.write = function (data) {
-    doc.update(data, id)
-    return true
-  }
-
-  s.end = function () {
-    //stream is disconnecting.
-    doc.removeListener('update', onUpdate)
-    s.emit('end')
-  }
-
-  return s
-}
+exports.Doc = exports
 
 function sync(a, b) {
-  var as = createStream(a)
-  var bs = createStream(b)
+  var as = exports.createStream(a)
+  var bs = exports.createStream(b)
   return as.pipe(bs).pipe(as)
 }
 
-//set
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-/*
-  a set is just a query.
-  could expand this to enable replicating a subset of a document.
-  that could enable massive documents that are too large to fit in memory.
-  as long as they could be partitioned.
-
-  heh, join queries? or rather, recursive queries,
-  for when rows have sets.
-
-  that is my vibe. don't make a database you have to 
-  _map_ to your application. pre-map the database.
-
-  could also specify sets like
-
-  //set of all things
-  {type: 'thing'}
-
-  //set of things with thier parts
-  { type: 'thing',
-    parts: {
-      parent_id: function (val) {return val == this.id}
-    }
-  }
-
-  or use map-reduces. remember, if the the reduce is 
-  monotonic you don't have to remember each input.
-*/
-
-function Set(doc, key, value) {
-  var array = this._array = []
-  var set = this
-
-  //DO NOT CHANGE once you have created the set.
-  this.key = key
-  this.value = value
-
-  doc.sets.on(key, function (row, changed) {
-    if(changed[key] !== value) return 
-
-    array.push(row)
-    set.emit('add', row)
-
-    function remove () {
-      if(row.state[key] === value) return
-
-      var i = array.indexOf(row)
-      if(~i) array.splice(i, 1)
-      set.emit('remove', row)
-      row.removeListener('changes', remove)
-    }
-
-    row.on('changes', remove)
-  })
-}
-
-Set.prototype.get = function () {
-  return this._array
-}
-
-Set.prototype.toJSON = function () {
-  return this._array.map(function (e) {
-    return e.state
-  }).sort(function (a, b) {
-    return strord(a.id, b.id)
-  })
-}
-
-Set.prototype.each = 
-Set.prototype.forEach = function (iter) {
-  return this._array.forEach(iter)
-}
 
 });
 
@@ -1211,6 +863,431 @@ EventEmitter.prototype.listeners = function(type) {
 
 });
 
+require.define("/node_modules/crdt/utils.js", function (require, module, exports, __dirname, __filename) {
+exports.clone = 
+function (ary) {
+  return ary.map(function (e) {
+    return Array.isArray(e) ? exports.clone(e) : e
+  })
+}
+
+exports.randstr   = randstr
+exports.between   = between
+exports.strord    = strord
+exports.merge     = merge
+exports.concat    = concat
+exports.timestamp = timestamp
+
+var chars =
+//'!"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+'!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~'
+
+function randstr(l) {
+  var str = ''
+  while(l--) 
+    str += chars[
+      Math.floor(
+        Math.random() * chars.length 
+      )
+    ]
+  return str
+}
+
+function between (a, b) {
+
+  if(a === b)
+    throw new Error(a + ' === ' + b)
+
+  //force order
+  if(a > b) {
+    var t = b; b = a; a = t
+  }
+
+  var s = '', i = 0
+
+  //match prefixes
+  while(a[i] === b[i]) s += a[i++]
+
+  var _a = chars.indexOf(a[i])
+  var _b = chars.indexOf(b[i])
+  
+  //if the indexes are adjacent, must lengthen the
+  //key. note: P is the middle most letter.
+  if(_a + 1 === _b) 
+    s += a[i] + 'P'
+  //otherwise, append the letter that is halfway
+  //between _a and _b.
+  else
+    s += chars[Math.round((_a+_b)/2)]
+
+  return s
+}
+
+
+//utils
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+function merge(to, from) {
+  for(var k in from)
+    to[k] = from[k]
+  return to
+}
+
+var _last = 0
+var _count = 1
+var LAST
+function timestamp () {
+  var t = Date.now()
+  var _t = t
+  if(_last == t) {
+//    while(_last == _t)
+    _t += ((_count++)/1000) 
+  } 
+  else _count = 1 
+
+  _last = t
+
+  if(_t === LAST)
+    throw new Error('LAST:' + LAST + ',' + _t)
+  LAST = _t
+  return _t
+}
+
+
+function strord (a, b) {
+  return (
+    a == b ?  0
+  : a <  b ? -1
+  :           1
+  )
+}
+
+function concat(to, from) {
+  while(from.length)
+    to.push(from.shift())
+  return to
+}
+
+});
+
+require.define("/node_modules/crdt/doc.js", function (require, module, exports, __dirname, __filename) {
+var inherits     = require('util').inherits
+var EventEmitter = require('events').EventEmitter
+var Row          = require('./row')
+var createStream = require('./stream')
+var u            = require('./utils')
+var Set          = require('./set')
+var Seq          = require('./seq')
+
+inherits(Doc, EventEmitter)
+
+module.exports = Doc
+//doc
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/*
+  idea: instead of using a tombstone for deletes,
+  use a anti-tombstone to show something is alive.
+  breathing: count. -- updated by an authority.
+  set breathing to 0 to kill something.
+  
+  if a node has rows that have been garbage collected on the server,
+  it will be obvious from the value of breathing.
+
+  node disconnects... makes changes...
+  other nodes delete some things, which get garbage collected.
+
+  node reconnects.
+  server updates the node, but only increments _breathing for some rows.
+  
+  clearly, the nodes that do not have an upto date _breathing are either
+  dead, or where created by the node while it was offline.
+
+  would breathing need to be a vector clock?
+  
+  if the disconneded node is still updating the rows,
+  maybe it shouldn't be deleted, that is, undeleted.
+
+  may be on to something here... but this needs more thinking.
+
+  will depend on how much churn something has...
+*/
+
+function order (a, b) {
+  return u.strord(a[2], b[2]) || u.strord(a[3], b[3])
+}
+
+function Doc (id) {
+  //the id of the doc refers to the instance.
+  //that is, to the node.
+  //it's used to identify a node 
+  this.id = id || '#' + Math.round(Math.random()*1000)
+  this.rows = {}
+  this.hist = {}
+  this.sets = new EventEmitter() //for tracking membership of sets.
+}
+
+Doc.prototype.add = function (initial) {
+
+  if(!initial.id)
+    throw new Error('id is required')
+  var r = this._add(initial.id, 'local')
+  r._set(initial, 'local')
+  return r
+}
+
+Doc.prototype._add = function (id, source) {
+
+  var doc = this
+
+  if(this.rows[id])
+    return this.rows[id]
+
+  var r = new Row(id)
+  this.rows[id] = r
+
+  function track (changes, source) {
+    var update = [r.id, changes, u.timestamp(), doc.id]
+    doc.update(update, source)
+  }
+
+  r.on('preupdate', track)
+
+  this.emit('add', r)
+  return r
+}
+
+Doc.prototype.timeUpdated = function (row, key) {
+  var h = this.hist[row.id] 
+  if(!h) return
+  return h[key][3]
+}
+
+Doc.prototype.set = function (id, change) {
+  var r = this._add(id, 'local')
+  return r.set(change)
+}
+
+/*
+  histroy for each row is indexed by key.
+  key -> update that set that key.
+
+  so applying a change is as simple
+  as iterating over the keys in the rows hist
+  checking if the new update is more recent
+  than the hist update
+  if so, replace that keys hist.
+
+*/
+
+Doc.prototype.update = function (update, source) {
+
+  //apply an update to a row.
+  //take into account histroy.
+  //and insert the change into the correct place.
+ 
+  var id      = update[0]
+  var changes = update[1]
+
+  var changed = {}
+
+  var row = this._add(id, source)
+  var hist = this.hist[id] = this.hist[id] || {}
+  var emit = false
+
+  if(!row.validate(changes)) return
+  
+  for(var key in changes) {
+    var value = changes[key]
+    if(!hist[key] || order(hist[key], update) < 0) {
+      hist[key] = update
+      changed[key] = changes[key]
+      emit = true 
+    }
+  }
+
+/*
+  probably, there may be mulitple sets that listen to the same key, 
+  but activate on different values...
+
+  hang on, in the mean time, I will probably only be managing n < 10 sets. 
+  at once, 
+*/
+
+  u.merge(row.state, changed)
+  for(var k in changed)
+    this.sets.emit(k, row, changed) 
+  
+  if(!emit) return
+
+  row.emit('update', update, changed)
+  row.emit('changes', changes, changed)
+  this.emit('update', update, source)
+}
+
+
+Doc.prototype.history = function (id) {
+  if(!arguments.length) {
+    var h = []
+    for (var id in this.hist) {
+      u.concat(h, this.history(id))
+    }
+    return h.sort(order)
+  }
+
+  var h = []
+  var hist = this.hist[id]
+  for (var k in hist) {
+    if(!~h.indexOf(hist[k]))
+      h.push(hist[k])
+  }
+  return h.sort(order)
+}
+
+function _set(self, key, val, type) {
+   var id = key + ':' + val
+  if(self.sets[id]) return self.sets[id] 
+  return self.sets[key + ':' + val] = new type(self, key, val) 
+}
+
+Doc.prototype.createSet = function (key, val) {
+  return _set(this, key, val, Set)
+}
+
+Doc.prototype.createSeq = function (key, val) {
+  return _set(this, key, val, Seq)
+}
+
+Doc.prototype.toJSON = function () {
+  var j = {}
+  for (var k in this.rows)
+    j[k] = this.rows[k].state
+  return j
+}
+
+
+
+});
+
+require.define("/node_modules/crdt/row.js", function (require, module, exports, __dirname, __filename) {
+//row
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+var inherits     = require('util').inherits
+var EventEmitter = require('events').EventEmitter
+
+module.exports = Row
+
+inherits(Row, EventEmitter)
+
+function Row (id) {
+  this.id = id
+  this.state = {id: id}
+}
+
+Row.prototype.set = function (changes, v) {
+  if(arguments.length == 2) {
+    var k = changes 
+    changes = {}
+    changes[k] = v
+  }
+
+  if(changes.id && changes.id !== this.state.id)
+    throw new Error('id cannot be changed')
+
+  this._set(changes, 'local')  
+  return this
+}
+
+Row.prototype.validate = function (changes) {
+  try {
+    this.emit('validate', changes)
+    return true
+  } catch (e) {
+    console.error('validation', e.message)
+    return false
+  } 
+}
+
+Row.prototype._set = function (changes, source) {
+
+  //the change is applied by the Doc!
+  this.emit('preupdate', changes, source)
+  return this
+}
+
+Row.prototype.get = function (key) {
+  if(key)
+    return this.state[key]
+  return this.state
+}
+
+Row.prototype.toJSON = function () {
+  return this.state
+}
+
+
+});
+
+require.define("/node_modules/crdt/stream.js", function (require, module, exports, __dirname, __filename) {
+
+var Stream       = require('stream')
+var u            = require('./utils')
+
+module.exports = createStream
+
+//stream
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+var streams = 1
+
+function createStream (doc) {
+  var id = streams++ //used locally so to prevent writing update back to their source
+  var s = new Stream() 
+  s.writable = s.readable = true
+  var queue = []
+
+  function enqueue() {
+    process.nextTick(s.flush)
+  }
+
+  function onUpdate (update, source) {
+    if(source === id) return
+      queue.push(update)
+    enqueue()
+  }
+
+  s.pipe = function (other) {
+    //emitting histroy must be deferred because downstream
+    //may not yet exist.  
+    u.concat(queue, doc.history()) 
+    enqueue()
+    doc.on('update', onUpdate)
+
+    return Stream.prototype.pipe.call(this, other)
+  }
+  
+  s.flush = function () {
+    while(queue.length)
+      s.emit('data', queue.shift())
+  }
+
+  s.write = function (data) {
+    doc.update(data, id)
+    return true
+  }
+
+  s.end = function () {
+    //stream is disconnecting.
+    doc.removeListener('update', onUpdate)
+    s.emit('end')
+  }
+
+  return s
+}
+
+
+
+});
+
 require.define("stream", function (require, module, exports, __dirname, __filename) {
 var events = require('events');
 var util = require('util');
@@ -1334,6 +1411,337 @@ Stream.prototype.pipe = function(dest, options) {
 
 });
 
+require.define("/node_modules/crdt/set.js", function (require, module, exports, __dirname, __filename) {
+var inherits     = require('util').inherits
+var EventEmitter = require('events').EventEmitter
+var u            = require('./utils')
+var Row          = require('./row')
+
+inherits(Set, EventEmitter)
+
+module.exports = Set
+
+//set
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/*
+  a set is just a query.
+  could expand this to enable replicating a subset of a document.
+  that could enable massive documents that are too large to fit in memory.
+  as long as they could be partitioned.
+
+  heh, join queries? or rather, recursive queries,
+  for when rows have sets.
+
+  that is my vibe. don't make a database you have to 
+  _map_ to your application. pre-map the database.
+
+  could also specify sets like
+
+  //set of all things
+  {type: 'thing'}
+
+  //set of things with thier parts
+  { type: 'thing',
+    parts: {
+      parent_id: function (val) {return val == this.id}
+    }
+  }
+
+  or use map-reduces. remember, if the the reduce is 
+  monotonic you don't have to remember each input.
+*/
+
+//TODO check if any currently existing items should be in the set. currently, one must create the set before recieving anything.
+
+function Set(doc, key, value) {
+  var array = this._array = []
+  var rows = this.rows =  {}
+  var set = this
+
+  //DO NOT CHANGE once you have created the set.
+  this.key = key
+  this.value = value
+
+  doc.sets.on(key, function (row, changed) {
+    if(changed[key] !== value) return 
+
+    array.push(row)
+    rows[row.id] = row
+    set.emit('add', row)
+
+    function remove (_, changed) {
+      if(row.state[key] === value)
+        return set.emit('changes', row, changed)
+      var i = array.indexOf(row)
+      if(~i) array.splice(i, 1)
+      delete rows[row.id]
+      set.emit('remove', row)
+      row.removeListener('changes', remove)
+    }
+
+    row.on('changes', remove)
+  })
+
+  this.rm = this.remove = function (row) {
+    row = row instanceof Row ? row : doc.rows[row.id]
+    return row.set(key, null)
+  }
+}
+
+Set.prototype.asArray = function () {
+  return this._array
+}
+
+Set.prototype.toJSON = function () {
+  return this._array.map(function (e) {
+    return e.state
+  }).sort(function (a, b) {
+    return u.strord(a._sort || a.id, b._sort || b.id)
+  })
+}
+
+Set.prototype.each = 
+Set.prototype.forEach = function (iter) {
+  return this._array.forEach(iter)
+}
+
+
+});
+
+require.define("/node_modules/crdt/seq.js", function (require, module, exports, __dirname, __filename) {
+
+var Set      = require('./set')
+var Row      = require('./row')
+var inherits = require('util').inherits
+var u        = require('./utils')
+
+module.exports = Seq
+
+/*
+  inherit from gset because seq will need a different
+  `remove` implementation to set.
+*/
+
+//return a string key that is after a, and before b.
+
+function sort (array) {
+  return array.sort(function (a, b) {
+    return u.strord(a.get('_sort'), b.get('_sort'))
+  })
+}
+
+inherits(Seq, Set)
+
+function find (obj, iter) {
+  
+  for(var k in obj) {
+    var v = obj[k]
+    if(iter(v, k, obj)) return v
+  }
+  return null
+}
+
+function Seq (doc, key, val) {
+
+  Set.call(this, doc, key, val)
+  var seq = this
+  this.on('changes', function (row, changes) {
+    console.log('CHANGE', row, changes)
+    if(!changes._sort) return
+    sort(seq._array)
+    //check if there is already an item with this sort key.
+    var prev = 
+    find(seq._array, function (other) {
+      return other != row && other.get('_sort') == row.get('_sort')
+    })
+    
+    if(prev) {
+      var next = seq.next(row)
+      console.log('P:', toKey(prev), toKey(next))
+      seq.insert(row, prev, seq.next(row))
+    }
+    else
+      seq.emit('move', row)
+  })
+  function get(id) {
+    return seq.rows[id]
+  }
+  this.insert = function (obj, before, after) {
+
+    before = toKey(get(before) || before || '!')
+    after  = toKey(get(after)  || after  || '~')
+
+    if('string'  === typeof obj)
+      obj = doc.rows[obj]
+
+//    if(before == after)
+  //    throw new Error('equal before/after')
+    /*
+      there could be a arbitary number of equal items.
+      find the last one, and nudge it across.
+
+      it's way easier if insert was passed the objects,
+      because then you have identity.
+
+      if it is just passed strings, it's best if the strings are
+      ids, not sort keys.
+
+      it will be except in push or unshift.
+      but a row should never have a _sort == ! || ~
+
+    */
+    var _sort = 
+       u.between(toKey(before) || '!', toKey(after) || '~') 
+     + u.randstr(3) //add a random tail so it's hard
+                    //to concurrently add two items with the
+                    //same sort.
+
+    var r, changes
+    if(obj instanceof Row) {
+      r = obj
+      changes = {_sort: _sort}
+      if(r.get(key) != val)
+        changes[key] = val
+      r.set(changes)
+    } else {
+      obj._sort = _sort
+      obj[key] = val
+      r = doc.set(id(obj), obj)
+    } 
+    sort(this._array)
+    return r
+  }
+}
+
+Seq.prototype.get = function () {
+  return this.array
+}
+
+function toKey (key) {
+
+  return (
+     'string' === typeof key ? key 
+  :  key instanceof Row      ? key.get()._sort
+  :  key                     ? key._sort
+  : null
+  )
+
+}
+
+/*
+  items are relative to each other,
+  more like a linked list.
+  although it is possible to make an
+  index based interface, before after,
+  etc is more natural
+*/
+
+function max (ary, test, wantIndex) {
+  var max = null, _max = -1
+  if(!ary.length) return
+
+  for (var i = 0; i < ary.length; i++)
+    if(test(max, ary[i])) max = ary[_max = i]
+  return wantIndex ? _max : max
+}
+
+Seq.prototype.prev = function (key) {
+  key = toKey(this.rows[key] || key || '~')
+  //find the greatest item that is less than `key`.
+  //since the list is kept in order,
+  //a binary search is used.
+  //think about that later
+  return max(this._array, function (M, m) {
+    if(toKey(m) < key)
+      return M ? toKey(m) > toKey(M) : true
+  })
+}
+
+Seq.prototype.next = function (key) {
+  key = toKey(this.rows[key] || key || '!')
+  //find the greatest item that is less than `key`.
+  //since the list is kept in order,
+  //a binary search is used.
+  //think about that later
+  return max(this._array, function (M, m) {
+    if(toKey(m) > key)
+      return M ? toKey(m) < toKey(M) : true
+  })
+}
+
+function id(obj) {
+  return (obj.id 
+  ||  obj._id 
+  ||  '_' + Date.now() 
+    + '_' + Math.round(Math.random()*1000)
+  )
+}
+
+Seq.prototype.before = function (obj, before) {
+  if(!before) return this.push(obj)
+  return this.insert(obj, this.prev(before) || '!', before)
+}
+
+Seq.prototype.after = function (obj, after) {
+  if(!after) 
+    return this.unshift(obj)
+  return this.insert(obj, after, this.next(after) || '!')
+}
+
+Seq.prototype.first = function () {
+  return this._array[0]
+}
+
+
+Seq.prototype.last = function () {
+  return this._array[this._array.length - 1]
+}
+
+Seq.prototype.indexOf = function (obj) {
+  return this._array.indexOf('string' == typeof obj ? this.rows[obj] : obj)
+}
+
+Seq.prototype.at = function (i) {
+  return this._array[i]
+}
+
+Seq.prototype.unshift = function (obj) {
+  return this.insert(obj, '!', this.first() || '~')
+}
+
+Seq.prototype.push = function (obj) {
+  return this.insert(obj,  this.last() || '!', '~') 
+}
+
+Seq.prototype.length = function () {
+  return this._array.length
+}
+
+Seq.prototype.pop = function () {
+  return this.remove(this.last())
+}
+
+Seq.prototype.shift = function () {
+  return this.remove(this.first())
+}
+
+/*
+  how will I sync this to a array in UI?
+  will need to emit something that the ui style can handle
+  or maybe slice events?
+
+  hooking onto an update event,
+  it will be necessary to calc the change in index.
+  
+  another way, just update the value, and resort the 
+  array. that may not be right for UI elements.
+
+  ah, well, you can see the index it has,
+  and the index it should have, and then move it.
+*/
+
+});
+
 require.define("/node_modules/browser-stream/package.json", function (require, module, exports, __dirname, __filename) {
 module.exports = {}
 });
@@ -1428,17 +1836,12 @@ module.exports = function (sock) {
 
 });
 
-require.define("/client.js", function (require, module, exports, __dirname, __filename) {
-    
+require.define("/chat.js", function (require, module, exports, __dirname, __filename) {
+var crdt = require('crdt')
 
-var crdt    = require('crdt')
-var _bs = require('browser-stream')
-var bs = _bs(io.connect('http://localhost:3000'))
+module.exports =
 
-/*
-  tidy this example & use jQuery
-*/
-function createChat (el, stream) {
+function createChat (el, doc) {
   var input, CONTENT
   var chat = $(el) //stick everything into the chat 
     .append(CONTENT = $('<div class=chat_text>'))
@@ -1446,39 +1849,35 @@ function createChat (el, stream) {
 
   messages = null
 
-  var set = SET = new crdt.Doc()
-
-  var messages = set.createSet('type', 'message')
+  var messages = doc.createSet('type', 'message')
 
   messages.on('add', function (obj) {
-      var div, span, a
-      div = 
-      $('<div class=line>')
-        .append(span = $('<span class=message>'))
-        .append(a = $('<a href=# class=del>x</a>')
-          .click(function () {
-            obj.set({__delete: true})
-          })
-        )
+    var div, span, a
+    div = 
+    $('<div class=line>')
+      .append(span = $('<span class=message>'))
+      .append(a = $('<a href=# class=del>x</a>')
+        .click(function () {
+          obj.set({__delete: true})
+        })
+      )
 
-      CONTENT.append(div)
+    CONTENT.append(div)
 
-      obj.on('update', function () {
-        if(obj.get('__delete')) {
-          div.remove()
-          obj.removeAllListeners('update')
-        }
-        span.text(obj.get('text'))
-      })
-
-      setTimeout(function () {
-      //scroll to bottom
-        CONTENT[0].scrollTop = 9999999
-      }, 10)
-
+    obj.on('update', function () {
+      if(obj.get('__delete')) {
+        div.remove()
+        obj.removeAllListeners('update')
+      }
+      span.text(obj.get('text'))
     })
 
-  stream.pipe(crdt.createStream(set)).pipe(stream)
+    setTimeout(function () {
+    //scroll to bottom
+      CONTENT[0].scrollTop = 9999999
+    }, 10)
+
+  })
 
   input.change(function () {
     //enter chat message
@@ -1487,26 +1886,230 @@ function createChat (el, stream) {
       var search = m[1]
       var replace = m[2]
       //search & replace
-      //add forEach, map, etc.
-      var set = messages.each(function (e) {
-        //oh... I threw away the state. hmm. need to do that differently.
+      messages.each(function (e) {
         var item = e.get(), text = item.text
         if(text && ~text.indexOf(search) && !item.__delete) {
-          var ntext = text.split(search).join(replace)
-          console.log('set text', ntext) 
-          e.set('text', ntext)
+          e.set('text', ntext.split(search).join(replace))
         }
       })
     } else 
-      SET.set('_'+Date.now(), {text: this.value, type: 'message'})
+      doc.set('_'+Date.now(), {text: this.value, type: 'message'})
     this.value = ''
   })
 }
 
+});
+
+require.define("/mouses.js", function (require, module, exports, __dirname, __filename) {
+/*
+  show other mouses of other users.
+
+  so that users don't feel lonely.
+*/
+
+var crdt = require('crdt')
+
+module.exports =
+function (doc) {
+
+  var mice = doc.createSet('type', 'mouse') 
+
+  var m = doc.add({id: 'user'+doc.id, type: 'mouse'})
+  var last = 0
+  window.addEventListener('mousemove', function (e) {
+    if(last + 100 < Date.now()) {
+      var ch = {x: e.x, y: e.y}
+      if(!m.get('in')) ch.in = true
+      m.set(ch)
+      last = Date.now()
+    }
+  })
+
+  window.addEventListener('mouseout', function (e) {
+    if(m.get('in')) {
+      m.set({in: false})
+    }
+  })
+
+  mice.on('add', function (m) {
+    console.log('ADD', m)
+    var pointer = 
+    $('<span class=pointer>' + m.id +'</span>')
+      .css({position: 'absolute'})
+
+    $('body').append(pointer)
+
+    m.on('update', function () {
+      console.log(m.get('id'), m.get('x'), m.get('y'), m.get('in'))
+      pointer.css({
+        left: m.get('x')
+      , top: m.get('y')
+      , display: m.get('in') ? 'block' : 'none'})
+    })
+  })
+} 
+
+});
+
+require.define("/sets.js", function (require, module, exports, __dirname, __filename) {
+var crdt = require('crdt')
+
+/*
+  add some sets, that items can be dragged and dropped between,
+  a la trello.
+
+  refactor this to decouple and to add support for crdt ordering.
+
+  okay:
+    the id of the element is the id of the row.
+    need a function to create a element for a given row.
+
+
+*/
+
+function seqWidget( el, seq, template ) {
+  el = $(el)
+  var name = el.attr('id')
+  
+  function update (r) {
+    
+    var li = $('#'+r.id)
+    li = li.length ? li : $(template(r))
+    var i = seq.indexOf(r) 
+    if(el.children().index(li) == i) return //already in place
+
+    var next = seq.next(r)
+    if (next) li.insertBefore($('#'+next.id)) 
+    else el.append(li)  
+  }
+
+  seq.on('move', update) //when a member of the set updates
+
+  function change (_, ui) {
+    var itemId = ui.item.attr('id')
+    var i = $(this).children().index(ui.item)
+    //update event is emitted when a item is removed from a set.
+    //in that case i will be -1. 
+    //changeSet will detect the correct index, though.
+    //if item is not already in correct position, move
+    if(~i && seq.indexOf(itemId) !== i)
+      seq.before(itemId, ui.item.next().attr('id'))
+  }
+
+  el.sortable({
+    connectWith: '.sortable',
+    receive: change,
+    update: change
+  })
+
+  return el
+  
+}
+
+module.exports = 
+function (div, doc) {
+ 
+  var c = 0
+  var sets = {}
+  function createSet (name) {
+    var el = $('<ul class=sortable id='+name+'>')
+    //var set = doc.createSet('set', name)
+    var seq = doc.createSeq('set', name)
+    
+    function update (r) {
+      
+      var li = $('#'+r.id)
+      li = li.length ? li : $('<li id='+r.id + '>' + r.get('text') + '</li>')
+      var i = seq.indexOf(r) 
+      if(el.children().index(li) == i) return //already in place
+
+
+      var next = seq.next(r)
+      if (next) li.insertBefore($('#'+next.id)) 
+      else el.append(li)
+    
+    }
+
+    seq.on('move', update) //when a member of the set updates
+
+    //refactor this out...
+    var c = Math.round(Math.random() * 100)
+    seq.push({id: 'item' + c, text: 'hello' + c, set: name})
+
+    function change (_, ui) {
+      var itemId = ui.item.attr('id')
+      var i = $(this).children().index(ui.item)
+      //update event is emitted when a item is removed from a set.
+      //in that case i will be -1. 
+      //changeSet will detect the correct index, though.
+      //if item is not already in correct position, move
+      if(~i || seq.indexOf(itemId) == i)
+        seq.before(itemId, ui.item.next().attr('id'))
+    }
+
+    el.sortable({
+      connectWith: '.sortable',
+      receive: change,
+      update: change
+    })
+
+    return el
+  }
+
+  div = $(div)
+
+  var a = doc.createSeq('set', 'a')
+  var b = doc.createSeq('set', 'b')
+  var c = doc.createSeq('set', 'c')
+
+  function t (r) {
+    return $('<li id='+r.id + '>' + r.get('text') + '</li>')
+  }
+  function st (n) {
+    return $('<ul class=sortable id='+n+'>')
+  }
+
+  div
+    .append(seqWidget(st('a'), a, t))
+    .append(seqWidget(st('b'), b, t))
+    .append(seqWidget(st('c'), c, t))
+
+  var n = Math.round(Math.random() * 100)
+  a.push({id: 'item' + n, text: 'hello' + n})
+
+  n = Math.round(Math.random() * 100)
+  b.push({id: 'item' + n, text: 'hello' + n})
+
+  n = Math.round(Math.random() * 100)
+  c.push({id: 'item' + n, text: 'hello' + n})
+
+
+
+}
+
+});
+
+require.define("/client.js", function (require, module, exports, __dirname, __filename) {
+    
+
+var crdt    = require('crdt')
+var _bs = require('browser-stream')
+var bs = _bs(io.connect('http://localhost:3000'))
+
+var createChat = require('./chat')
+var createMice = require('./mouses')
+var createSets = require('./sets')
+
+var doc = new crdt.Doc()
+
 $(function () {
-  createChat('#chat', bs.createStream('test'))
+  var stream = crdt.createStream(doc)
+  stream.pipe(bs.createStream('test')).pipe(stream)
+  createChat('#chat', doc)
+  //createMice(doc)
+  createSets('#sets', doc)
   //  SET = new crdt.Doc()
-  //MESSAGES = SET.createSet('type', 'message')
+  //MESSAGES = SET.createSet'type', 'message')
   //var stream = crdt.createStream(SET)
   //stream.pipe(bs.createStream('test')).pipe(stream)
 })
