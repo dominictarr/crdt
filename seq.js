@@ -42,19 +42,19 @@ function Seq (doc, key, val) {
     else
       seq.emit('move', row)
   })
-  function get(id) {
-    return seq.rows[id]
-  }
   this.insert = function (obj, before, after) {
 
-    before = toKey(get(before) || before || '!')
-    after  = toKey(get(after)  || after  || '~')
+    before = toKey(this.get(before) || '!')
+    after  = toKey(this.get(after)  || '~')
 
-    if('string'  === typeof obj)
+
+    //must get id from the doc,
+    //because may be moving this item into this set.
+    if('string' === typeof obj)
       obj = doc.rows[obj]
 
     var _sort = 
-       u.between(toKey(before) || '!', toKey(after) || '~') 
+       u.between(before, after ) 
      + u.randstr(3) //add a random tail so it's hard
                     //to concurrently add two items with the
                     //same sort.
@@ -76,8 +76,10 @@ function Seq (doc, key, val) {
   }
 }
 
-Seq.prototype.get = function () {
-  return this.array
+Seq.prototype.get = function (id) {
+  if(!arguments.length)
+    return this.array
+  return 'string' === typeof id ? this.rows[id] : id
 }
 
 function toKey (key) {
@@ -109,7 +111,7 @@ function max (ary, test, wantIndex) {
 }
 
 Seq.prototype.prev = function (key) {
-  key = toKey(this.rows[key] || key || '~')
+  key = toKey(this.get(key) || '~')
   //find the greatest item that is less than `key`.
   //since the list is kept in order,
   //a binary search is used.
@@ -121,7 +123,7 @@ Seq.prototype.prev = function (key) {
 }
 
 Seq.prototype.next = function (key) {
-  key = toKey(this.rows[key] || key || '!')
+  key = toKey(this.get(key) || '!')
   return max(this._array, function (M, m) {
     if(toKey(m) > key)
       return M ? toKey(m) < toKey(M) : true
@@ -137,14 +139,11 @@ function id(obj) {
 }
 
 Seq.prototype.before = function (obj, before) {
-  if(!before) return this.push(obj)
-  return this.insert(obj, this.prev(before) || '!', before)
+  return this.insert(obj, this.prev(before), before)
 }
 
 Seq.prototype.after = function (obj, after) {
-  if(!after) 
-    return this.unshift(obj)
-  return this.insert(obj, after, this.next(after) || '!')
+  return this.insert(obj, after, this.next(after))
 }
 
 Seq.prototype.first = function () {
@@ -164,11 +163,11 @@ Seq.prototype.at = function (i) {
 }
 
 Seq.prototype.unshift = function (obj) {
-  return this.insert(obj, '!', this.first() || '~')
+  return this.insert(obj, '!', this.first())
 }
 
 Seq.prototype.push = function (obj) {
-  return this.insert(obj,  this.last() || '!', '~') 
+  return this.insert(obj, this.last(), '~') 
 }
 
 Seq.prototype.length = function () {
