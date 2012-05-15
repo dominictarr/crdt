@@ -6,19 +6,16 @@ var crdt = require('crdt')
 
   refactor this to decouple and to add support for crdt ordering.
 
-  okay:
-    the id of the element is the id of the row.
-    need a function to create a element for a given row.
-
-
+  change css to make lists parellel.
+  
+  'add' link, inplace editing.
 */
 
 function seqWidget( el, seq, template ) {
   el = $(el)
   var name = el.attr('id')
   
-  function update (r) {
-    
+  function update (r) { 
     var li = $('#'+r.id)
     li = li.length ? li : $(template(r))
 
@@ -27,7 +24,7 @@ function seqWidget( el, seq, template ) {
 
     var next = seq.next(r)
     if (next) li.insertBefore($('#'+next.id)) 
-    else el.append(li)  
+    else el.append(li) 
   }
 
   seq.on('move', update) //when a member of the set updates
@@ -75,6 +72,12 @@ function (div, doc) {
     .append(seqWidget(st('b'), b, t))
     .append(seqWidget(st('c'), c, t))
 
+  a.on('move', function (r) {
+    console.log('MOVE', r, a.indexOf(r))
+  })
+
+  setTimeout(function () {
+
   var n = Math.round(Math.random() * 100)
   a.push({id: 'item' + n, text: 'hello' + n})
 
@@ -84,6 +87,5 @@ function (div, doc) {
   n = Math.round(Math.random() * 100)
   c.push({id: 'item' + n, text: 'hello' + n})
 
-
-
+  }, 100)
 }
