@@ -58,7 +58,7 @@ function Seq (doc, key, val) {
      + u.randstr(3) //add a random tail so it's hard
                     //to concurrently add two items with the
                     //same sort.
-
+ 
     var r, changes
     if(obj instanceof Row) {
       r = obj

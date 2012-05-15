@@ -69,6 +69,8 @@ function Set(doc, key, value) {
   })
 
   this.rm = this.remove = function (row) {
+    if(!row) return
+    row = this.get(row)
     row = row instanceof Row ? row : doc.rows[row.id]
     return row.set(key, null)
   }

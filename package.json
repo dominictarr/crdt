@@ -14,6 +14,7 @@
     "node": "*"
   },
   "dependencies": {
+    "between": "0.0.0"
   },
   "devDependencies": {
     "it-is": "~1.0.1",
