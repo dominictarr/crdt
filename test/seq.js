@@ -130,3 +130,50 @@ exports['collision'] = function (t) {
   insert before.
 
 */
+
+function sync(array, seq) {
+  var r = {}
+  'pop,push,shift,unshift'.split(',').forEach(function (n) {
+    r[n] = function (i) {
+      seq[n](i)
+      array[n](i)
+      console.log(i)
+      if(i) {
+        a.equal(array.indexOf(i), seq.indexOf(i.id))
+      }
+      a.deepEqual(seq.toJSON(), array)
+
+    }
+  })
+  return r
+}
+
+
+exports.random = function (t) {
+
+  var doc = new crdt.Doc()
+  var seq = new Seq(doc, 'type', 'thing')
+  var ary = []
+  
+  var s = sync(ary, seq)
+
+  s.push({id: 'a', hello:3 })
+  s.push({id: 'B', hello:3 })
+  s.unshift({id: 'c', hello:'x'})
+
+  console.log(ary)
+  s.pop()
+  var l = 92
+  while(l --) {
+    var op = ['push','pop', 'shift', 'unshift'][~~(Math.random()*4)]
+    var obj = {id: '_'+Math.random(), r: Math.random()}
+    console.log(op, obj, ary.length, l)
+    try {
+    s[op](obj)
+    } catch (e) {
+      console.log(ary)
+      throw e
+    }
+  }
+  t.end()
+}
