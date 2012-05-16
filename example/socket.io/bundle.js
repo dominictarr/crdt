@@ -864,6 +864,8 @@ EventEmitter.prototype.listeners = function(type) {
 });
 
 require.define("/node_modules/crdt/utils.js", function (require, module, exports, __dirname, __filename) {
+var b = require('between')
+
 exports.clone = 
 function (ary) {
   return ary.map(function (e) {
@@ -871,61 +873,13 @@ function (ary) {
   })
 }
 
-exports.randstr   = randstr
-exports.between   = between
-exports.strord    = strord
+exports.randstr   = b.randstr
+exports.between   = b.between
+exports.strord    = b.strord
 exports.merge     = merge
 exports.concat    = concat
 exports.timestamp = timestamp
 
-var chars =
-//'!"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~'
-'!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~'
-
-function randstr(l) {
-  var str = ''
-  while(l--) 
-    str += chars[
-      Math.floor(
-        Math.random() * chars.length 
-      )
-    ]
-  return str
-}
-
-function between (a, b) {
-
-  if(a === b)
-    throw new Error(a + ' === ' + b)
-
-  //force order
-  if(a > b) {
-    var t = b; b = a; a = t
-  }
-
-  var s = '', i = 0
-
-  //match prefixes
-  while(a[i] === b[i]) s += a[i++]
-
-  var _a = chars.indexOf(a[i])
-  var _b = chars.indexOf(b[i])
-  
-  //if the indexes are adjacent, must lengthen the
-  //key. note: P is the middle most letter.
-  if(_a + 1 === _b) 
-    s += a[i] + 'P'
-  //otherwise, append the letter that is halfway
-  //between _a and _b.
-  else
-    s += chars[Math.round((_a+_b)/2)]
-
-  return s
-}
-
-
-//utils
-//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 function merge(to, from) {
   for(var k in from)
@@ -953,20 +907,117 @@ function timestamp () {
   return _t
 }
 
-
-function strord (a, b) {
-  return (
-    a == b ?  0
-  : a <  b ? -1
-  :           1
-  )
-}
-
 function concat(to, from) {
   while(from.length)
     to.push(from.shift())
   return to
 }
+
+});
+
+require.define("/node_modules/crdt/node_modules/between/package.json", function (require, module, exports, __dirname, __filename) {
+module.exports = {}
+});
+
+require.define("/node_modules/crdt/node_modules/between/index.js", function (require, module, exports, __dirname, __filename) {
+
+exports = module.exports = function (chars, exports) {
+
+  chars = chars ||
+  '!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz~'
+
+  chars = chars.split('').sort().join('')
+
+  exports = exports || {} 
+
+  exports.randstr   = randstr
+  exports.between   = between
+  exports.strord    = strord
+
+  exports.lo        = chars[0]
+  exports.hi        = chars[chars.length - 1]
+
+  function randstr(l) {
+    var str = ''
+    while(l--) 
+      str += chars[
+        Math.floor(
+          Math.random() * chars.length 
+        )
+      ]
+    return str
+  }
+
+  /*
+    SOME EXAMPLE STRINGS, IN ORDER
+   
+    0
+    00001
+    0001
+    001
+    001001
+    00101
+    0011
+    0011001
+    001100101
+    00110011
+    001101
+    00111
+    01  
+
+    if you never make a string that ends in the lowest char,
+    then it is always possible to make a string between two strings.
+    this is like how decimals never end in 0. 
+
+    example:
+
+    between('A', 'AB') 
+
+    ... 'AA' will sort between 'A' and 'AB' but then it is impossible
+    to make a string inbetween 'A' and 'AA'.
+    instead, return 'AAB', then there will be space.
+
+  */
+
+  function between (a, b) {
+
+    var s = '', i = 0
+
+    while (true) {
+
+      var _a = chars.indexOf(a[i])
+      var _b = chars.indexOf(b[i])
+     
+      if(_a == -1) _a = 0
+      if(_b == -1) _b = chars.length - 1
+
+      i++
+
+      var c = chars[
+          _a + 1 < _b 
+        ? Math.round((_a+_b)/2) 
+        : _a
+      ]
+
+      s += c
+
+      if(a < s && s < b && c != exports.lo)
+        return s;
+    }
+  }
+
+  function strord (a, b) {
+    return (
+      a == b ?  0
+    : a <  b ? -1
+    :           1
+    )
+  }
+
+  return exports
+}
+
+exports(null, module.exports)
 
 });
 
@@ -1483,6 +1534,8 @@ function Set(doc, key, value) {
   })
 
   this.rm = this.remove = function (row) {
+    if(!row) return
+    row = this.get(row)
     row = row instanceof Row ? row : doc.rows[row.id]
     return row.set(key, null)
   }
@@ -1517,13 +1570,6 @@ var u        = require('./utils')
 
 module.exports = Seq
 
-/*
-  inherit from gset because seq will need a different
-  `remove` implementation to set.
-*/
-
-//return a string key that is after a, and before b.
-
 function sort (array) {
   return array.sort(function (a, b) {
     return u.strord(a.get('_sort'), b.get('_sort'))
@@ -1546,7 +1592,6 @@ function Seq (doc, key, val) {
   Set.call(this, doc, key, val)
   var seq = this
   this.on('changes', function (row, changes) {
-    console.log('CHANGE', row, changes)
     if(!changes._sort) return
     sort(seq._array)
     //check if there is already an item with this sort key.
@@ -1554,48 +1599,30 @@ function Seq (doc, key, val) {
     find(seq._array, function (other) {
       return other != row && other.get('_sort') == row.get('_sort')
     })
-    
-    if(prev) {
-      var next = seq.next(row)
-      console.log('P:', toKey(prev), toKey(next))
-      seq.insert(row, prev, seq.next(row))
-    }
+
+    //nudge it forward if it has the same key.    
+    if(prev)
+      seq.insert(row, prev, seq.next(row)) 
     else
       seq.emit('move', row)
   })
-  function get(id) {
-    return seq.rows[id]
-  }
   this.insert = function (obj, before, after) {
 
-    before = toKey(get(before) || before || '!')
-    after  = toKey(get(after)  || after  || '~')
+    before = toKey(this.get(before) || '!')
+    after  = toKey(this.get(after)  || '~')
 
-    if('string'  === typeof obj)
+
+    //must get id from the doc,
+    //because may be moving this item into this set.
+    if('string' === typeof obj)
       obj = doc.rows[obj]
 
-//    if(before == after)
-  //    throw new Error('equal before/after')
-    /*
-      there could be a arbitary number of equal items.
-      find the last one, and nudge it across.
-
-      it's way easier if insert was passed the objects,
-      because then you have identity.
-
-      if it is just passed strings, it's best if the strings are
-      ids, not sort keys.
-
-      it will be except in push or unshift.
-      but a row should never have a _sort == ! || ~
-
-    */
     var _sort = 
-       u.between(toKey(before) || '!', toKey(after) || '~') 
+       u.between(before, after ) 
      + u.randstr(3) //add a random tail so it's hard
                     //to concurrently add two items with the
                     //same sort.
-
+ 
     var r, changes
     if(obj instanceof Row) {
       r = obj
@@ -1613,8 +1640,10 @@ function Seq (doc, key, val) {
   }
 }
 
-Seq.prototype.get = function () {
-  return this.array
+Seq.prototype.get = function (id) {
+  if(!arguments.length)
+    return this.array
+  return 'string' === typeof id ? this.rows[id] : id
 }
 
 function toKey (key) {
@@ -1646,7 +1675,7 @@ function max (ary, test, wantIndex) {
 }
 
 Seq.prototype.prev = function (key) {
-  key = toKey(this.rows[key] || key || '~')
+  key = toKey(this.get(key) || '~')
   //find the greatest item that is less than `key`.
   //since the list is kept in order,
   //a binary search is used.
@@ -1658,11 +1687,7 @@ Seq.prototype.prev = function (key) {
 }
 
 Seq.prototype.next = function (key) {
-  key = toKey(this.rows[key] || key || '!')
-  //find the greatest item that is less than `key`.
-  //since the list is kept in order,
-  //a binary search is used.
-  //think about that later
+  key = toKey(this.get(key) || '!')
   return max(this._array, function (M, m) {
     if(toKey(m) > key)
       return M ? toKey(m) < toKey(M) : true
@@ -1678,20 +1703,16 @@ function id(obj) {
 }
 
 Seq.prototype.before = function (obj, before) {
-  if(!before) return this.push(obj)
-  return this.insert(obj, this.prev(before) || '!', before)
+  return this.insert(obj, this.prev(before), before)
 }
 
 Seq.prototype.after = function (obj, after) {
-  if(!after) 
-    return this.unshift(obj)
-  return this.insert(obj, after, this.next(after) || '!')
+  return this.insert(obj, after, this.next(after))
 }
 
 Seq.prototype.first = function () {
   return this._array[0]
 }
-
 
 Seq.prototype.last = function () {
   return this._array[this._array.length - 1]
@@ -1706,11 +1727,11 @@ Seq.prototype.at = function (i) {
 }
 
 Seq.prototype.unshift = function (obj) {
-  return this.insert(obj, '!', this.first() || '~')
+  return this.insert(obj, '!', this.first())
 }
 
 Seq.prototype.push = function (obj) {
-  return this.insert(obj,  this.last() || '!', '~') 
+  return this.insert(obj, this.last(), '~') 
 }
 
 Seq.prototype.length = function () {
@@ -1725,20 +1746,6 @@ Seq.prototype.shift = function () {
   return this.remove(this.first())
 }
 
-/*
-  how will I sync this to a array in UI?
-  will need to emit something that the ui style can handle
-  or maybe slice events?
-
-  hooking onto an update event,
-  it will be necessary to calc the change in index.
-  
-  another way, just update the value, and resort the 
-  array. that may not be right for UI elements.
-
-  ah, well, you can see the index it has,
-  and the index it should have, and then move it.
-*/
 
 });
 
@@ -1960,27 +1967,25 @@ var crdt = require('crdt')
 
   refactor this to decouple and to add support for crdt ordering.
 
-  okay:
-    the id of the element is the id of the row.
-    need a function to create a element for a given row.
-
-
+  change css to make lists parellel.
+  
+  'add' link, inplace editing.
 */
 
 function seqWidget( el, seq, template ) {
   el = $(el)
   var name = el.attr('id')
   
-  function update (r) {
-    
+  function update (r) { 
     var li = $('#'+r.id)
     li = li.length ? li : $(template(r))
+
     var i = seq.indexOf(r) 
     if(el.children().index(li) == i) return //already in place
 
     var next = seq.next(r)
     if (next) li.insertBefore($('#'+next.id)) 
-    else el.append(li)  
+    else el.append(li) 
   }
 
   seq.on('move', update) //when a member of the set updates
@@ -2010,71 +2015,94 @@ module.exports =
 function (div, doc) {
  
   var c = 0
-  var sets = {}
-  function createSet (name) {
-    var el = $('<ul class=sortable id='+name+'>')
-    //var set = doc.createSet('set', name)
-    var seq = doc.createSeq('set', name)
-    
-    function update (r) {
-      
-      var li = $('#'+r.id)
-      li = li.length ? li : $('<li id='+r.id + '>' + r.get('text') + '</li>')
-      var i = seq.indexOf(r) 
-      if(el.children().index(li) == i) return //already in place
-
-
-      var next = seq.next(r)
-      if (next) li.insertBefore($('#'+next.id)) 
-      else el.append(li)
-    
-    }
-
-    seq.on('move', update) //when a member of the set updates
-
-    //refactor this out...
-    var c = Math.round(Math.random() * 100)
-    seq.push({id: 'item' + c, text: 'hello' + c, set: name})
-
-    function change (_, ui) {
-      var itemId = ui.item.attr('id')
-      var i = $(this).children().index(ui.item)
-      //update event is emitted when a item is removed from a set.
-      //in that case i will be -1. 
-      //changeSet will detect the correct index, though.
-      //if item is not already in correct position, move
-      if(~i || seq.indexOf(itemId) == i)
-        seq.before(itemId, ui.item.next().attr('id'))
-    }
-
-    el.sortable({
-      connectWith: '.sortable',
-      receive: change,
-      update: change
-    })
-
-    return el
-  }
-
   div = $(div)
 
   var a = doc.createSeq('set', 'a')
   var b = doc.createSeq('set', 'b')
   var c = doc.createSeq('set', 'c')
 
-  function t (r) {
-    return $('<li id='+r.id + '>' + r.get('text') + '</li>')
+  function inplace (initial, cb) {
+    var i = $('<input>')
+    var done = false
+    i.attr('value', initial)
+    function edit (e) {
+      if(done) return
+      done = true
+      cb.call(this, this.value)
+      i.remove()
+    }
+    i.change(edit)
+    i.blur(edit)
+    setTimeout(function () {i.focus()}, 1)
+    return i
   }
-  function st (n) {
-    return $('<ul class=sortable id='+n+'>')
+
+  function t (r) {
+    var text, check
+    var el = $('<li id='+r.id + '>')
+      .append(text = $('<span>'+r.get('text')+'</span>'))
+      .append(check = $('<input type=checkbox>'))
+
+    r.on('update', function () {
+      text.text(r.get('text'))
+      check.attr('checked', r.get('checked'))
+    }) 
+
+    check.attr('checked', !! r.get('checked'))
+    check.click(function () {
+      r.set({checked: !! check.attr('checked')})
+    })
+
+    text.click(function () {
+      text.hide()
+      el.append(inplace(r.get('text'), function (val) {
+        if(val) r.set({text: val})
+        text.show()
+      }))
+    })
+    return el
+  }
+
+  function st (q) {
+    return $('<ul class=sortable id='+q.id+'>')
+  }
+
+  function addable (s, q) {
+    var add
+    var el = $('<div class=sortbox>')
+      .append(s)
+      .append(add = $('<a href=#>add</a>'))
+
+    add.click(function () {
+      add.hide()
+      el.append(inplace('', function (val) {
+        if(val) q.push({text: val})
+        add.show()
+      }))
+    })
+    return el 
   }
 
   div
-    .append(seqWidget(st('a'), a, t))
-    .append(seqWidget(st('b'), b, t))
-    .append(seqWidget(st('c'), c, t))
+    .append(addable(seqWidget(st(a), a, t), a))
+    .append(addable(seqWidget(st(b), b, t), b))
+    .append(addable(seqWidget(st(c), c, t), c))
+ 
+  /*
+    nest the div inside another set...
+    so that it is concurrently sortable
+    like trello.
+  */
+ 
+  div.sortable()
 
-  var n = Math.round(Math.random() * 100)
+  a.on('move', function (r) {
+    console.log('MOVE', r, a.indexOf(r))
+  })
+
+  setTimeout(function () {
+
+/*  var n = Math.round(Math.random() * 100)
   a.push({id: 'item' + n, text: 'hello' + n})
 
   n = Math.round(Math.random() * 100)
@@ -2082,9 +2110,8 @@ function (div, doc) {
 
   n = Math.round(Math.random() * 100)
   c.push({id: 'item' + n, text: 'hello' + n})
-
-
-
+*/
+  }, 100)
 }
 
 });

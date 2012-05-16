@@ -17,11 +17,10 @@ set.on('update', console.log)
 
 io.sockets.on('connection', function (sock) {
 
-  var stream = crdt.createStream(set)
   var bs = _bs(sock)
   console.log(sock)
   bs.on('connection', function (s) {
     s.on('data', console.log)
-    stream.pipe(s).pipe(stream)
+    s.pipe(crdt.createStream(set)).pipe(s)
   })
 })

@@ -60,17 +60,80 @@ function (div, doc) {
   var b = doc.createSeq('set', 'b')
   var c = doc.createSeq('set', 'c')
 
-  function t (r) {
-    return $('<li id='+r.id + '>' + r.get('text') + '</li>')
+  function inplace (initial, cb) {
+    var i = $('<input>')
+    var done = false
+    i.attr('value', initial)
+    function edit (e) {
+      if(done) return
+      done = true
+      cb.call(this, this.value)
+      i.remove()
+    }
+    i.change(edit)
+    i.blur(edit)
+    setTimeout(function () {i.focus()}, 1)
+    return i
   }
-  function st (n) {
-    return $('<ul class=sortable id='+n+'>')
+
+  function t (r) {
+    var text, check
+    var el = $('<li id='+r.id + '>')
+      .append(text = $('<span>'+r.get('text')+'</span>'))
+      .append(check = $('<input type=checkbox>'))
+
+    r.on('update', function () {
+      text.text(r.get('text'))
+      check.attr('checked', r.get('checked'))
+    }) 
+
+    check.attr('checked', !! r.get('checked'))
+    check.click(function () {
+      r.set({checked: !! check.attr('checked')})
+    })
+
+    text.click(function () {
+      text.hide()
+      el.append(inplace(r.get('text'), function (val) {
+        if(val) r.set({text: val})
+        text.show()
+      }))
+    })
+    return el
+  }
+
+  function st (q) {
+    return $('<ul class=sortable id='+q.id+'>')
+  }
+
+  function addable (s, q) {
+    var add
+    var el = $('<div class=sortbox>')
+      .append(s)
+      .append(add = $('<a href=#>add</a>'))
+
+    add.click(function () {
+      add.hide()
+      el.append(inplace('', function (val) {
+        if(val) q.push({text: val})
+        add.show()
+      }))
+    })
+    return el 
   }
 
   div
-    .append(seqWidget(st('a'), a, t))
-    .append(seqWidget(st('b'), b, t))
-    .append(seqWidget(st('c'), c, t))
+    .append(addable(seqWidget(st(a), a, t), a))
+    .append(addable(seqWidget(st(b), b, t), b))
+    .append(addable(seqWidget(st(c), c, t), c))
+ 
+  /*
+    nest the div inside another set...
+    so that it is concurrently sortable
+    like trello.
+  */
+ 
+  div.sortable()
 
   a.on('move', function (r) {
     console.log('MOVE', r, a.indexOf(r))
@@ -78,7 +141,7 @@ function (div, doc) {
 
   setTimeout(function () {
 
-  var n = Math.round(Math.random() * 100)
+/*  var n = Math.round(Math.random() * 100)
   a.push({id: 'item' + n, text: 'hello' + n})
 
   n = Math.round(Math.random() * 100)
@@ -86,6 +149,6 @@ function (div, doc) {
 
   n = Math.round(Math.random() * 100)
   c.push({id: 'item' + n, text: 'hello' + n})
-
+*/
   }, 100)
 }
