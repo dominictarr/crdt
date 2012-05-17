@@ -135,7 +135,7 @@ function sync(array, seq) {
   var r = {}
   'pop,push,shift,unshift'.split(',').forEach(function (n) {
     r[n] = function (i) {
-      seq[n](i)
+      seq[n](/push|unshift/.test(n) ? i : id(i))
       array[n](i)
       console.log(i)
       if(i) {
