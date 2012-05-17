@@ -76,12 +76,6 @@ function Seq (doc, key, val) {
   }
 }
 
-Seq.prototype.get = function (id) {
-  if(!arguments.length)
-    return this.array
-  return 'string' === typeof id ? this.rows[id] : id
-}
-
 function toKey (key) {
 
   return (

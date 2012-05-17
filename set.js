@@ -58,9 +58,10 @@ function Set(doc, key, value) {
     function remove (_, changed) {
       if(row.state[key] === value)
         return set.emit('changes', row, changed)
+      delete rows[row.id]
       var i = array.indexOf(row)
       if(~i) array.splice(i, 1)
-      delete rows[row.id]
+      else return 
       set.emit('remove', row)
       row.removeListener('changes', remove)
     }
@@ -69,9 +70,8 @@ function Set(doc, key, value) {
   })
 
   this.rm = this.remove = function (row) {
+    row = this.get(row) 
     if(!row) return
-    row = this.get(row)
-    row = row instanceof Row ? row : doc.rows[row.id]
     return row.set(key, null)
   }
 }
@@ -93,3 +93,12 @@ Set.prototype.forEach = function (iter) {
   return this._array.forEach(iter)
 }
 
+Set.prototype.get = function (id) {
+  if(!arguments.length)
+    return this.array
+  return (
+      'string' === typeof id ? this.rows[id] 
+    : id && id.id            ? this.rows[id.id]
+    :                          id
+  )
+}
