@@ -193,6 +193,5 @@ Doc.prototype.toJSON = function () {
 //retrive a reference to a row.
 //if the row is not created yet, create 
 Doc.prototype.get = function (id) {
-  var r = new Row(id)
-  return this.rows[id] = r
+  return this.rows[id] = this.rows[id] || new Row(id)
 }
