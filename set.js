@@ -98,6 +98,7 @@ Set.prototype.get = function (id) {
     return this.array
   return (
       'string' === typeof id ? this.rows[id] 
+    : 'number' === typeof id ? this.rows[id] 
     : id && id.id            ? this.rows[id.id]
     :                          id
   )
