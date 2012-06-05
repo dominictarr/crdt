@@ -47,10 +47,13 @@ function createStream (doc) {
 
   s.end = function () {
     //stream is disconnecting.
-    doc.removeListener('update', onUpdate)
     s.emit('end')
+    s.destroy()
   }
-
+  s.destroy = function () {  
+    doc.removeListener('update', onUpdate)
+    s.emit('close')
+  }
   return s
 }
 
