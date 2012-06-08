@@ -69,7 +69,7 @@ Doc.prototype._add = function (id, source) {
   if(this.rows[id])
     return this.rows[id]
 
-  var r = new Row(id)
+  var r = id instanceof Row ? id : new Row(id)
   this.rows[id] = r
 
   function track (changes, source) {
