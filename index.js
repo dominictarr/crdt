@@ -5,7 +5,7 @@ var u            = require('./utils')
 
 exports = module.exports = require('./doc')
 exports.Row              = require('./row')
-exports.createStream     = require('./stream')
+exports.createStream     = require('./stream').createStream
 exports.sync             = sync
 exports.Set              = require('./set')
 exports.Seq              = require('./seq')

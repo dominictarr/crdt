@@ -1,7 +1,7 @@
 var inherits     = require('util').inherits
 var EventEmitter = require('events').EventEmitter
 var Row          = require('./row')
-var createStream = require('./stream')
+var stream       = require('./stream')
 var u            = require('./utils')
 var Set          = require('./set')
 var Seq          = require('./seq')
@@ -50,6 +50,7 @@ function Doc (id) {
   this.id = id || '#' + Math.round(Math.random()*1000)
   this.rows = {}
   this.hist = {}
+  this.recieved = {}
   this.sets = new EventEmitter() //for tracking membership of sets.
 }
 
@@ -114,12 +115,19 @@ Doc.prototype.update = function (update, source) {
  
   var id      = update[0]
   var changes = update[1]
+  var timestamp = update[2]
+  var from    = update[3]
 
   var changed = {}
 
   var row = this._add(id, source)
   var hist = this.hist[id] = this.hist[id] || {}
-  var emit = false
+  var emit = false, oldnews = false
+
+
+  //remember the most recent update from each node.
+  if(!this.recieved[from] || this.recieved[from] < timestamp)
+    this.recieved[from] = timestamp
 
   if(!row.validate(changes)) return
   
@@ -194,4 +202,12 @@ Doc.prototype.toJSON = function () {
 //if the row is not created yet, create 
 Doc.prototype.get = function (id) {
   return this.rows[id] = this.rows[id] || this._add(new Row(id), 'local')
+}
+
+Doc.prototype.createWriteStream = function (opts) {
+  return stream.createWriteStream(this, opts)
+}
+
+Doc.prototype.createReadStream = function (opts) {
+  return stream.createReadStream(this, opts)
 }
