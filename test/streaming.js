@@ -21,6 +21,7 @@ test('random', function (t) {
 
   var a = new crdt.Doc()
   var b = new crdt.Doc()
+  a.sync = b.sync = true
   var as = crdt.createStream(a)
   var bs = crdt.createStream(b)
 
@@ -86,6 +87,7 @@ test ('histroy', function (t) {
 //and send it so that everyone is in sync.
   var a = new crdt.Doc()
   var b = new crdt.Doc()
+  a.sync = b.sync = true
   var as = crdt.createStream(a)
   var bs = crdt.createStream(b)
 
@@ -117,6 +119,7 @@ test ('histroy2', function (t) {
 //and send it so that everyone is in sync.
   var a = new crdt.Doc()
   var b = new crdt.Doc()
+  a.sync = b.sync = true
   var as = crdt.createStream(a, 'a')
   var bs = crdt.createStream(b, 'b')
 
@@ -152,6 +155,7 @@ test ('histroy3', function (t) {
   var a = new crdt.Doc()
   var b = new crdt.Doc()  
   var c = new crdt.Doc()
+  a.sync = b.sync = c.sync = true
   var as = crdt.createStream(a, 'a')
   var bs = crdt.createStream(b, 'b')
   var bs2 = crdt.createStream(b, 'b2')
@@ -199,6 +203,7 @@ test ('client-server', function (t) {
   var a = new crdt.Doc()
   var b = new crdt.Doc()  
   var c = new crdt.Doc()
+  a.sync = b.sync = c.sync = true
 
   var as = crdt.createStream(a, 'a')
   var bs = crdt.createStream(b, 'b')
