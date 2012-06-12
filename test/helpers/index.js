@@ -5,12 +5,16 @@ var assert  = require('assertions')
 exports.validateUpdates = function (t) {
 //  var t = assert
   return es.mapSync(function (update) {
-    assert.equal(update.length, 4, 'length of update')
-    t.equal(typeof update[0], 'string')
-    t.equal(typeof update[1], 'object')
-    t.equal(typeof update[2], 'number')
-    t.equal(typeof update[3], 'string')
-
+    if(Array.isArray(update)) {
+      assert.equal(update.length, 4, 'length of update')
+      t.equal(typeof update[0], 'string')
+      t.equal(typeof update[1], 'object')
+      t.equal(typeof update[2], 'number')
+      t.equal(typeof update[3], 'string')
+    } else {
+      t.equal(typeof update.iam, 'string')
+      t.equal(typeof update.iknow, 'object')
+    }
     return update
   })
 }
