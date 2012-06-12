@@ -10,7 +10,6 @@ var app = connect()
 
 io = io.listen(app.listen(3000))
 
-
 var set = new crdt.Doc()
 
 set.on('update', console.log)
