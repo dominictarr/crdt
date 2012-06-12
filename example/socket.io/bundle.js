@@ -344,11 +344,11 @@ exports.extname = function(path) {
 
 });
 
-require.define("/node_modules/crdt/package.json", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/node_modules/crdt/package.json", function (require, module, exports, __dirname, __filename) {
 module.exports = {}
 });
 
-require.define("/node_modules/crdt/index.js", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/node_modules/crdt/index.js", function (require, module, exports, __dirname, __filename) {
 //index
 var inherits     = require('util').inherits
 var EventEmitter = require('events').EventEmitter
@@ -356,7 +356,7 @@ var u            = require('./utils')
 
 exports = module.exports = require('./doc')
 exports.Row              = require('./row')
-exports.createStream     = require('./stream')
+exports.createStream     = require('./stream').createStream
 exports.sync             = sync
 exports.Set              = require('./set')
 exports.Seq              = require('./seq')
@@ -863,7 +863,7 @@ EventEmitter.prototype.listeners = function(type) {
 
 });
 
-require.define("/node_modules/crdt/utils.js", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/node_modules/crdt/utils.js", function (require, module, exports, __dirname, __filename) {
 var b = require('between')
 
 exports.clone = 
@@ -915,11 +915,11 @@ function concat(to, from) {
 
 });
 
-require.define("/node_modules/crdt/node_modules/between/package.json", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/node_modules/crdt/node_modules/between/package.json", function (require, module, exports, __dirname, __filename) {
 module.exports = {}
 });
 
-require.define("/node_modules/crdt/node_modules/between/index.js", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/node_modules/crdt/node_modules/between/index.js", function (require, module, exports, __dirname, __filename) {
 
 exports = module.exports = function (chars, exports) {
 
@@ -1021,11 +1021,11 @@ exports(null, module.exports)
 
 });
 
-require.define("/node_modules/crdt/doc.js", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/node_modules/crdt/doc.js", function (require, module, exports, __dirname, __filename) {
 var inherits     = require('util').inherits
 var EventEmitter = require('events').EventEmitter
 var Row          = require('./row')
-var createStream = require('./stream')
+var stream       = require('./stream')
 var u            = require('./utils')
 var Set          = require('./set')
 var Seq          = require('./seq')
@@ -1074,6 +1074,7 @@ function Doc (id) {
   this.id = id || '#' + Math.round(Math.random()*1000)
   this.rows = {}
   this.hist = {}
+  this.recieved = {}
   this.sets = new EventEmitter() //for tracking membership of sets.
 }
 
@@ -1093,7 +1094,7 @@ Doc.prototype._add = function (id, source) {
   if(this.rows[id])
     return this.rows[id]
 
-  var r = new Row(id)
+  var r = id instanceof Row ? id : new Row(id)
   this.rows[id] = r
 
   function track (changes, source) {
@@ -1138,12 +1139,19 @@ Doc.prototype.update = function (update, source) {
  
   var id      = update[0]
   var changes = update[1]
+  var timestamp = update[2]
+  var from    = update[3]
 
   var changed = {}
 
   var row = this._add(id, source)
   var hist = this.hist[id] = this.hist[id] || {}
-  var emit = false
+  var emit = false, oldnews = false
+
+
+  //remember the most recent update from each node.
+  if(!this.recieved[from] || this.recieved[from] < timestamp)
+    this.recieved[from] = timestamp
 
   if(!row.validate(changes)) return
   
@@ -1214,12 +1222,23 @@ Doc.prototype.toJSON = function () {
     j[k] = this.rows[k].state
   return j
 }
+//retrive a reference to a row.
+//if the row is not created yet, create 
+Doc.prototype.get = function (id) {
+  return this.rows[id] = this.rows[id] || this._add(new Row(id), 'local')
+}
 
+Doc.prototype.createWriteStream = function (opts) {
+  return stream.createWriteStream(this, opts)
+}
 
+Doc.prototype.createReadStream = function (opts) {
+  return stream.createReadStream(this, opts)
+}
 
 });
 
-require.define("/node_modules/crdt/row.js", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/node_modules/crdt/row.js", function (require, module, exports, __dirname, __filename) {
 //row
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 var inherits     = require('util').inherits
@@ -1278,23 +1297,49 @@ Row.prototype.toJSON = function () {
 
 });
 
-require.define("/node_modules/crdt/stream.js", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/node_modules/crdt/stream.js", function (require, module, exports, __dirname, __filename) {
 
 var Stream       = require('stream')
 var u            = require('./utils')
 
-module.exports = createStream
-
+exports.createStream = createStream
+exports.createReadStream = createReadStream
+exports.createWriteStream = createWriteStream
 //stream
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/*
+  to support scuttlebutt reconciliation, begin stream with a greeting
+  that gives timestamp of data last recieved from each node.
 
+  http://www.cs.cornell.edu/home/rvr/papers/flowgossip.pdf 
+
+  pass in mode = scuttlebutt? 
+
+  it's necessary to waint for the first greeting but that isn't 
+  gonna happen when writing to disk.
+
+  in that case, act a little different...
+
+  so: nodes should communicate with the disk via
+  createWriteStream createReadStream,
+  and communicate with each other via
+  createStream
+
+  when ever I open a stream to disk, I either write or read.
+  (usally switching when the stream ends)
+
+  but if I'm communicating, that is typically a non-ending stream.
+  also, when writing to disk, I want to save the id.
+  so should begin by writing a {iam: id} message,
+  and then read that in when reading.
+*/
 var streams = 1
-
-function createStream (doc) {
+function createStream (doc, opts) {
   var id = streams++ //used locally so to prevent writing update back to their source
   var s = new Stream() 
   s.writable = s.readable = true
   var queue = []
+  var other, recieved = {}
 
   function enqueue() {
     process.nextTick(s.flush)
@@ -1306,36 +1351,183 @@ function createStream (doc) {
     enqueue()
   }
 
-  s.pipe = function (other) {
+  function onSync () {
     //emitting histroy must be deferred because downstream
     //may not yet exist.  
+    //send scuttlebutt greeting
+
+   queue.push({iam: doc.id, iknow: doc.recieved})
     u.concat(queue, doc.history()) 
     enqueue()
     doc.on('update', onUpdate)
+    doc.removeListener('sync', onSync)
+  }
 
+  s.pipe = function (other) {
+    if(doc.sync) onSync()
+    else doc.on('sync', onSync)
     return Stream.prototype.pipe.call(this, other)
   }
-  
+ 
   s.flush = function () {
-    while(queue.length)
-      s.emit('data', queue.shift())
+    while(queue.length) {
+      var update = queue.shift()
+      //if message is scuttlebutt status
+      if(!Array.isArray(update))
+        s.emit('data', update)
+      else {
+        //if this has already been seen, do not send.
+        var timestamp = update[2]
+        var from      = update[3]
+        if(!recieved[from] || timestamp >= recieved[from])
+          s.emit('data', update)
+      }
+    }
   }
 
   s.write = function (data) {
-    doc.update(data, id)
+    /*data may also be an scuttlebutt reconciliation
+    message. in that case, use it to filter emits.
+    if data is an object, it's to filter updates.
+    remember it for later.
+    */
+    if(!Array.isArray(data)) {
+      other = data.iam
+      if(data.iknow)
+        for(var k in data.iknow)
+          recieved[k] = data.iknow[k] 
+    } else
+      doc.update(data, id)
     return true
   }
 
   s.end = function () {
     //stream is disconnecting.
-    doc.removeListener('update', onUpdate)
     s.emit('end')
+    s.destroy()
   }
 
+  s.destroy = function () {  
+    doc.removeListener('update', onUpdate)
+    doc.removeListener('sync', onSync)
+    s.emit('close')
+  }
   return s
 }
 
+function createReadStream(doc, opts) {
+  opts = opts || {}
+  if(opts.end !== false)
+    opts.end = true
+  console.log('CRS', opts)
+  var s = new Stream()
+  var queue = []
 
+  s.readable = true
+  s.writable = false
+
+  function onUpdate (data) {
+    queue.push(data)
+    enqueue()
+  }
+
+  s.pause = function () {
+    s.paused = true
+  }
+
+  s.resume = function () {
+    s.paused = false
+  }
+
+  function enqueue() {
+    process.nextTick(s.flush)
+  }
+
+  s.flush = function () {
+    console.log('FLUSH')
+    while(queue.length && !s.paused)
+      s.emit('data', queue.shift())
+    if(opts.end && !queue.length && !s.paused && !s.ended) {
+      s.emit('end')
+      s.emit('close')
+      s.ended = true
+    }
+  }
+
+  s.destroy = function () { 
+    queue.length = 0
+    doc.removeListener('update', onUpdate)
+    s.ended = true
+    s.paused = false
+    s.readable = false
+  }
+
+  s.pipe = function (other) {
+    //emitting histroy must be deferred because downstream
+    //may not yet exist.  
+    //send scuttlebutt greeting
+    console.log('PIPE')
+    queue.push({iam: doc.id})
+
+    u.concat(queue, doc.history()) 
+    enqueue()
+    if(!opts.end)
+      doc.on('update', onUpdate)
+
+    return Stream.prototype.pipe.call(this, other)
+  }
+
+  return s 
+}
+
+function createWriteStream (doc, opts) {
+   
+  var s = new Stream()
+  s.writable = true
+  s.readable = false
+  var first = false
+
+  doc._syncCount = doc._syncCount || 0
+
+  doc._syncCount ++
+
+  s.write = function (data) {    
+    if(s.ended)
+      throw new Error('stream has ended')
+    if(!first && data.iam){
+      doc.id = data.iam
+      first = true
+    } else
+      doc.update(data, 'local')
+  }
+
+  s.end = function (data) {
+    if(data)
+      s.write(data)
+    s.ended = true
+    s.emit('end')
+    /*
+      it may be desirable to sync to multiple sources.
+      just incase, keep count and do not set sync = true
+      unless you are the last one. 
+    */
+    if(--doc._syncCount === 0) {
+      doc.sync = true
+      doc.emit('sync')
+    }
+    s.emit('close') 
+  }
+
+  s.destroy = function () {
+    s.ended = true
+    s.writable = false
+    if(!s.closed)
+      s.emit('close')
+    s.closed = true
+  }
+
+  return s 
+}
 
 });
 
@@ -1462,7 +1654,7 @@ Stream.prototype.pipe = function(dest, options) {
 
 });
 
-require.define("/node_modules/crdt/set.js", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/node_modules/crdt/set.js", function (require, module, exports, __dirname, __filename) {
 var inherits     = require('util').inherits
 var EventEmitter = require('events').EventEmitter
 var u            = require('./utils')
@@ -1523,9 +1715,10 @@ function Set(doc, key, value) {
     function remove (_, changed) {
       if(row.state[key] === value)
         return set.emit('changes', row, changed)
+      delete rows[row.id]
       var i = array.indexOf(row)
       if(~i) array.splice(i, 1)
-      delete rows[row.id]
+      else return 
       set.emit('remove', row)
       row.removeListener('changes', remove)
     }
@@ -1534,9 +1727,8 @@ function Set(doc, key, value) {
   })
 
   this.rm = this.remove = function (row) {
+    row = this.get(row) 
     if(!row) return
-    row = this.get(row)
-    row = row instanceof Row ? row : doc.rows[row.id]
     return row.set(key, null)
   }
 }
@@ -1558,10 +1750,20 @@ Set.prototype.forEach = function (iter) {
   return this._array.forEach(iter)
 }
 
+Set.prototype.get = function (id) {
+  if(!arguments.length)
+    return this.array
+  return (
+      'string' === typeof id ? this.rows[id] 
+    : 'number' === typeof id ? this.rows[id] 
+    : id && id.id            ? this.rows[id.id]
+    :                          id
+  )
+}
 
 });
 
-require.define("/node_modules/crdt/seq.js", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/node_modules/crdt/seq.js", function (require, module, exports, __dirname, __filename) {
 
 var Set      = require('./set')
 var Row      = require('./row')
@@ -1638,12 +1840,6 @@ function Seq (doc, key, val) {
     sort(this._array)
     return r
   }
-}
-
-Seq.prototype.get = function (id) {
-  if(!arguments.length)
-    return this.array
-  return 'string' === typeof id ? this.rows[id] : id
 }
 
 function toKey (key) {
@@ -1843,7 +2039,885 @@ module.exports = function (sock) {
 
 });
 
-require.define("/chat.js", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/node_modules/kv/package.json", function (require, module, exports, __dirname, __filename) {
+module.exports = {"browserify":"./client.js"}
+});
+
+require.define("/example/socket.io/node_modules/kv/client.js", function (require, module, exports, __dirname, __filename) {
+
+var ends = require('./endpoints-client')
+var kv   = require('./kv')
+
+module.exports = kv(ends)
+
+});
+
+require.define("/example/socket.io/node_modules/kv/endpoints-client.js", function (require, module, exports, __dirname, __filename) {
+var es = require('event-stream')
+
+module.exports = function (prefix, exports) {
+
+  exports = exports || {}
+
+  //put, get, del, has
+
+  exports.put = function (key, opts) {
+    var _key = prefix+':'+key
+    opts = opts || {flags: 'w'}
+    if(opts.flags !== 'a' || !localStorage[_key])
+      localStorage[_key] = ''
+    //assume write if not explicit append.
+
+    var ws = es.through(function (data) {
+      localStorage[_key] += data + '\n'
+    })
+
+    //remove readable api.
+    ws.readable = false
+    delete ws.pause
+    delete ws.resume
+
+    return ws
+  }
+
+  exports.get = function (key, opts) { 
+    var _key = prefix+':'+key
+    var array = localStorage[_key].split(/(\n)/)
+    console.log('ARRAY', array)
+    if(!array[array.length - 1])
+      array.pop() //expecting an empty '' at the end.
+    return es.readArray(array) 
+  }
+
+  exports.del = function (key, cb) {
+    var _key = prefix+':'+key
+    process.nextTick(function () {
+      if(!localStorage[_key])
+        return cb(new Error ('no record: ' + key))
+
+      delete localStorage[prefix+':'+key]
+      cb()
+    })
+  }
+
+  exports.has = function (key, cb) {
+    var _key = prefix+':'+key
+    process.nextTick(function () {
+      if(!localStorage[_key])
+        return cb(new Error ('no record: ' + key))
+      cb()
+    })
+  }
+
+  return exports
+}
+
+});
+
+require.define("/example/socket.io/node_modules/event-stream/package.json", function (require, module, exports, __dirname, __filename) {
+module.exports = {}
+});
+
+require.define("/example/socket.io/node_modules/event-stream/index.js", function (require, module, exports, __dirname, __filename) {
+//filter will reemit the data if cb(err,pass) pass is truthy
+// reduce is more tricky
+// maybe we want to group the reductions or emit progress updates occasionally
+// the most basic reduce just emits one 'data' event after it has recieved 'end'
+
+
+var Stream = require('stream').Stream
+  , es = exports
+
+es.Stream = Stream //re-export Stream from core
+
+// through
+//
+// a stream that does nothing but re-emit the input.
+// useful for aggregating a series of changing but not ending streams into one stream)
+
+es.through = function (write, end) {
+  write = write || function (data) { this.emit('data', data) }
+  end = (
+    'sync'== end || !end
+  //use sync end. (default)
+  ? function () { this.emit('end') }
+  : 'async' == end || end === true 
+  //use async end.
+  //must eventually call drain if paused.
+  //else will not end.
+  ? function () {
+      if(!this.paused)
+        return this.emit('end')
+     var self = this
+     this.once('drain', function () {
+        self.emit('end')
+      })
+    }
+  //use custom end function
+  : end 
+  )
+  var ended = false
+  var stream = new Stream()
+  stream.readable = stream.writable = true
+  
+  stream.write = function (data) {
+    write.call(this, data)
+    return !stream.paused
+  }
+  stream.end = function (data) {
+    if(ended) return
+    ended = true
+    if(arguments.length) stream.write(data)
+    end.call(this)
+    stream.destroy()
+  }
+  /*
+    destroy is called on a writable stream when the upstream closes.
+    it's basically END but something has gone wrong.
+    I'm gonna emit 'close' and change then otherwise act as 'end'
+  */
+  stream.destroy = function () {
+    stream.emit('close')
+    ended = true
+  }
+  stream.pause = function () {
+    stream.paused = true
+  }
+  stream.resume = function () {
+    if(stream.paused)
+      stream.emit('drain')
+    stream.paused = false
+  }
+  return stream
+}
+
+// buffered
+//
+// same as a through stream, but won't emit a chunk until the next tick.
+// does not support any pausing. intended for testing purposes.
+
+// XXX: rewrite this. this is crap. but do I actually use it? maybe just throw it away?
+// okay, it's used in snob. so... throw this out and let snob use a legacy version. (fix later/never)
+
+
+// merge / concat
+//
+// combine multiple streams into a single stream.
+// will emit end only once
+es.concat = //actually this should be called concat
+es.merge = function (/*streams...*/) {
+  var toMerge = [].slice.call(arguments)
+  var stream = new Stream()
+  var endCount = 0
+  stream.writable = stream.readable = true
+
+  toMerge.forEach(function (e) {
+    e.pipe(stream, {end: false})
+    var ended = false
+    e.on('end', function () {
+      if(ended) return
+      ended = true
+      endCount ++
+      if(endCount == toMerge.length)
+        stream.emit('end') 
+    })
+  })
+  stream.write = function (data) {
+    this.emit('data', data)
+  }
+
+  return stream
+}
+
+
+// writable stream, collects all events into an array 
+// and calls back when 'end' occurs
+// mainly I'm using this to test the other functions
+
+es.writeArray = function (done) {
+  if ('function' !== typeof done)
+    throw new Error('function writeArray (done): done must be function')
+
+  var a = new Stream ()
+    , array = []
+  a.write = function (l) {
+    array.push(l)
+  }
+  a.end = function () {
+    done(null, array)
+  }
+  a.writable = true
+  a.readable = false
+  return a
+}
+
+//return a Stream that reads the properties of an object
+//respecting pause() and resume()
+
+es.readArray = function (array) {
+  var stream = new Stream()
+    , i = 0
+    , paused = false
+ 
+  stream.readable = true  
+  stream.writable = false
+ 
+  if(!Array.isArray(array))
+    throw new Error('event-stream.read expects an array')
+  
+  stream.resume = function () {
+    paused = false
+    var l = array.length
+    while(i < l && !paused) {
+      stream.emit('data', array[i++])
+    }
+    if(i == l)
+      stream.emit('end'), stream.readable = false
+  }
+  process.nextTick(stream.resume)
+  stream.pause = function () {
+     paused = true
+  }
+  return stream
+}
+
+//
+// readable (asyncFunction)
+// return a stream that calls an async function while the stream is not paused.
+//
+// the function must take: (count, callback) {...
+//
+es.readable = function (func, continueOnError) {
+  var stream = new Stream()
+    , i = 0
+    , paused = false
+    , ended = false
+    , reading = false
+
+  stream.readable = true  
+  stream.writable = false
+ 
+  if('function' !== typeof func)
+    throw new Error('event-stream.readable expects async function')
+  
+  stream.on('end', function () { ended = true })
+  
+  function get (err, data) {
+    
+    if(err) {
+      stream.emit('error', err)
+      if(!continueOnError) stream.emit('end')
+    } else if (arguments.length > 1)
+      stream.emit('data', data)
+
+    process.nextTick(function () {
+      if(ended || paused || reading) return
+      try {
+        reading = true
+        func.call(stream, i++, function () {
+          reading = false
+          get.apply(null, arguments)
+        })
+      } catch (err) {
+        stream.emit('error', err)    
+      }
+    })
+  
+  }
+  stream.resume = function () {
+    paused = false
+    get()
+  }
+  process.nextTick(get)
+  stream.pause = function () {
+     paused = true
+  }
+  stream.destroy = function () {
+    stream.emit('close')
+    stream.emit('end')
+    ended = true
+  }
+  return stream
+}
+
+
+//create an event stream and apply function to each .write
+//emitting each response as data
+//unless it's an empty callback
+
+es.map = function (mapper) {
+  var stream = new Stream()
+    , inputs = 0
+    , outputs = 0
+    , ended = false
+    , paused = false
+    , destroyed = false
+
+  stream.writable = true
+  stream.readable = true
+   
+  stream.write = function () {
+    if(ended) throw new Error('map stream is not writable')
+    inputs ++
+    var args = [].slice.call(arguments)
+      , r
+      , inNext = false 
+    //pipe only allows one argument. so, do not 
+    function next (err) {
+      if(destroyed) return
+      inNext = true
+      outputs ++
+      var args = [].slice.call(arguments)
+      if(err) {
+        args.unshift('error')
+        return inNext = false, stream.emit.apply(stream, args)
+      }
+      args.shift() //drop err
+      if (args.length){
+        args.unshift('data')
+        r = stream.emit.apply(stream, args)
+      }
+      if(inputs == outputs) {
+        if(paused) paused = false, stream.emit('drain') //written all the incoming events
+        if(ended)
+          stream.end()
+      }
+      inNext = false
+    }
+    args.push(next)
+    
+    try {
+      //catch sync errors and handle them like async errors
+      var written = mapper.apply(null, args)
+      if(written === false) paused = true
+      return written
+    } catch (err) {
+      //if the callback has been called syncronously, and the error
+      //has occured in an listener, throw it again.
+      if(inNext)
+        throw err
+      next(err)
+      return true
+    }
+  }
+
+  stream.end = function () {
+    var args = [].slice.call(arguments)
+    //if end was called with args, write it, 
+    ended = true //write will emit 'end' if ended is true
+    if(args.length)
+      return stream.write.apply(emitter, args)
+    else if (inputs == outputs) //wait for processing
+      stream.emit('end')
+  }
+
+  stream.destroy = function () {
+    ended = destroyed = true
+    stream.writable = stream.readable = paused = false
+  }
+
+  return stream
+}
+
+
+//
+// map sync
+//
+
+es.mapSync = function (sync) { 
+  return es.through(function write(data) {
+    this.emit('data', sync(data))
+  })
+}
+
+//
+// log just print out what is coming through the stream, for debugging
+//
+
+es.log = function (name) {
+  return es.through(function (data) {
+    var args = [].slice.call(arguments)
+    if(name) console.error(name, data)
+    else     console.error(data)
+    this.emit('data', data)
+  })
+}
+
+//
+// combine multiple streams together so that they act as a single stream
+//
+
+es.pipe = es.connect = function () {
+
+  var streams = [].slice.call(arguments)
+    , first = streams[0]
+    , last = streams[streams.length - 1]
+    , thepipe = es.duplex(first, last)
+
+  if(streams.length == 1)
+    return streams[0]
+  else if (!streams.length)
+    throw new Error('connect called with empty args')
+
+  //pipe all the streams together
+
+  function recurse (streams) {
+    if(streams.length < 2)
+      return
+    streams[0].pipe(streams[1])
+    recurse(streams.slice(1))  
+  }
+  
+  recurse(streams)
+ 
+  function onerror () {
+    var args = [].slice.call(arguments)
+    args.unshift('error')
+    thepipe.emit.apply(thepipe, args)
+  }
+  
+  streams.forEach(function (stream) {
+    stream.on('error', onerror)
+  })
+
+  return thepipe
+}
+
+//
+// child -- pipe through a child process
+//
+
+es.child = function (child) {
+
+  return es.duplex(child.stdin, child.stdout)
+
+}
+
+//
+// duplex -- pipe into one stream and out another
+//
+
+es.duplex = function (writer, reader) {
+  var thepipe = new Stream()
+
+  thepipe.__defineGetter__('writable', function () { return writer.writable })
+  thepipe.__defineGetter__('readable', function () { return reader.readable })
+
+  ;['write', 'end', 'close'].forEach(function (func) {
+    thepipe[func] = function () {
+      return writer[func].apply(writer, arguments)
+    }
+  })
+
+  ;['resume', 'pause'].forEach(function (func) {
+    thepipe[func] = function () { 
+      thepipe.emit(func)
+      if(reader[func])
+        return reader[func].apply(reader, arguments)
+      else
+        reader.emit(func)
+    }
+  })
+
+  ;['data', 'close'].forEach(function (event) {
+    reader.on(event, function () {
+      var args = [].slice.call(arguments)
+      args.unshift(event)
+      thepipe.emit.apply(thepipe, args)
+    })
+  })
+  //only emit end once
+  var ended = false
+  reader.on('end', function () {
+    if(ended) return
+    ended = true
+    var args = [].slice.call(arguments)
+    args.unshift('end')
+    thepipe.emit.apply(thepipe, args)
+  })
+
+  return thepipe
+}
+
+es.split = function (matcher) {
+  var soFar = ''
+  if (!matcher)
+    matcher = '\n'
+
+  return es.through(function (buffer) { 
+    var stream = this
+      , pieces = (soFar + buffer).split(matcher)
+    soFar = pieces.pop()
+
+    pieces.forEach(function (piece) {
+      stream.emit('data', piece)
+    })
+
+    return true
+  },
+  function () {
+    if(soFar)
+      this.emit('data', soFar)  
+    this.emit('end')
+  })
+}
+
+//
+// gate 
+//
+// while the gate is shut(), buffer incoming. 
+// 
+// if gate is open() stream like normal.
+//
+// currently, when opened, this will emit all data unless it is shut again
+// if downstream pauses it will still write, i'd like to make it respect pause, 
+// but i'll need a test case first.
+
+es.gate = function (shut) {
+
+  var stream = new Stream()
+    , queue = []
+    , ended = false
+
+    shut = (shut === false ? false : true) //default to shut
+
+  stream.writable = true
+  stream.readable = true
+
+  stream.isShut = function () { return shut }
+  stream.shut   = function () { shut = true }
+  stream.open   = function () { shut = false; maybe() }
+  
+  function maybe () {
+    while(queue.length && !shut) {
+      var args = queue.shift()
+      args.unshift('data')
+      stream.emit.apply(stream, args)
+    }
+    stream.emit('drain')
+    if(ended && !shut) 
+      stream.emit('end')
+  }
+  
+  stream.write = function () {
+    var args = [].slice.call(arguments)
+  
+    queue.push(args)
+    if (shut) return false //pause up stream pipes  
+
+    maybe()
+  }
+
+  stream.end = function () {
+    ended = true
+    if (!queue.length)
+      stream.emit('end')
+  }
+
+  return stream
+}
+
+//
+// parse
+//
+
+es.parse = function () { 
+  return es.through(function (data) {
+    try {
+      if(data) //ignore empty lines
+        this.emit('data', JSON.parse(data.toString()))
+    } catch (err) {
+      console.error(err, 'attemping to parse:', data)
+    }
+  })
+}
+//
+// stringify
+//
+
+es.stringify = function () { 
+  return es.mapSync(function (e){
+    return JSON.stringify(e) + '\n'
+  }) 
+}
+
+//
+// replace a string within a stream.
+//
+// warn: just concatenates the string and then does str.split().join(). 
+// probably not optimal.
+// for smallish responses, who cares?
+// I need this for shadow-npm so it's only relatively small json files.
+
+es.replace = function (from, to) {
+  return es.connect(es.split(from), es.join(to))
+} 
+
+//
+// join chunks with a joiner. just like Array#join
+// also accepts a callback that is passed the chunks appended together
+// this is still supported for legacy reasons.
+// 
+
+es.join = function (str) {
+  
+  //legacy api
+  if('function' === typeof str)
+    return es.wait(str)
+
+  var stream = new Stream()
+  var first = true
+  stream.readable = stream.writable = true
+  stream.write = function (data) {
+    if(!first)
+      stream.emit('data', str)
+    first = false
+    stream.emit('data', data)
+    return true
+  }
+  stream.end = function (data) {
+    if(data)
+      this.write(data)
+    this.emit('end')
+  }
+  return stream
+}
+
+
+//
+// wait. callback when 'end' is emitted, with all chunks appended as string.
+//
+
+es.wait = function (callback) {
+  var stream = new Stream()
+  var body = ''
+  stream.readable = true
+  stream.writable = true
+  stream.write = function (data) { body += data }
+  stream.end = function (data) {
+    if(data)
+      body += data
+    if(callback)
+      callback(null, body)
+    stream.emit('data', body)
+    stream.emit('end')
+  }
+  return stream
+}
+
+//
+// helper to make your module into a unix pipe
+// simply add 
+// 
+// if(!module.parent)
+//  require('event-stream').pipable(asyncFunctionOrStreams)
+// 
+// asyncFunctionOrStreams may be one or more Streams or if it is a function, 
+// it will be automatically wrapped in es.map
+//
+// then pipe stuff into from the command line!
+// 
+// curl registry.npmjs.org/event-stream | node hello-pipeable.js | grep whatever
+//
+// etc!
+//
+// also, start pipeable running as a server!
+//
+// > node hello-pipeable.js --port 44444
+// 
+
+var setup = function (args) {
+  return args.map(function (f) {
+    var x = f()
+      if('function' === typeof x)
+        return es.map(x)
+      return x
+    })
+}
+
+es.pipeable = function () {
+  if(process.title != 'node')
+    return console.error('cannot use es.pipeable in the browser')
+  //(require) inside brackets to fool browserify, because this does not make sense in the browser.
+  var opts = (require)('optimist').argv
+  var args = [].slice.call(arguments)
+  
+  if(opts.h || opts.help) {
+    var name = process.argv[1]
+    console.error([
+      'Usage:',
+      '',
+      'node ' + name + ' [options]',
+      '  --port PORT        turn this stream into a server',
+      '  --host HOST        host of server (localhost is default)',
+      '  --protocol         protocol http|net will require(protocol).createServer(...',
+      '  --help             display this message',
+      '',
+      ' if --port is not set, will stream input from stdin',
+      '',
+      'also, pipe from or to files:',
+      '',
+      ' node '+name+ ' < file    #pipe from file into this stream',
+      ' node '+name+ ' < infile > outfile    #pipe from file into this stream',     
+      '',
+    ].join('\n'))
+  
+  } else if (!opts.port) {
+    var streams = setup(args)
+    streams.unshift(es.split())
+    //streams.unshift()
+    streams.push(process.stdout)
+    var c = es.connect.apply(null, streams)
+    process.openStdin().pipe(c) //there
+    return c
+
+  } else {
+  
+    opts.host = opts.host || 'localhost'
+    opts.protocol = opts.protocol || 'http'
+    
+    var protocol = (require)(opts.protocol)
+        
+    var server = protocol.createServer(function (instream, outstream) {  
+      var streams = setup(args)
+      streams.unshift(es.split())
+      streams.unshift(instream)
+      streams.push(outstream || instream)
+      es.pipe.apply(null, streams)
+    })
+    
+    server.listen(opts.port, opts.host)
+
+    console.error(process.argv[1] +' is listening for "' + opts.protocol + '" on ' + opts.host + ':' + opts.port)  
+  }
+}
+
+});
+
+require.define("/example/socket.io/node_modules/kv/kv.js", function (require, module, exports, __dirname, __filename) {
+/*
+  very simple kv store setup for to be able to append to each document.
+  each value is stored in a separate file,
+  put, get, return streams
+*/
+
+var es     = require('event-stream')
+var EventEmitter = require('events').EventEmitter
+
+var formats = {
+  raw: function (stream) {
+    return stream
+  },
+  json: function (stream, key) {
+    /*
+      if anyone ever wants to use this for something other than
+      new line seperated json, this will need to be modified.
+      because the __list record will still be a stream of arrays.
+
+      either handle it differently, by it's key,
+      or make it possible to by-pass the streamer, or add a header or something.
+      hmm. or a way to force it to write a raw stream.
+
+      or maybe just have a separate set of records for headers?
+      or the first line?
+
+      I know:
+
+        you go: get[format](key) //and can add more formats. json, raw, etc.
+    */
+    var s
+    stream.once('close', function () {
+      s.emit('close')
+    })
+    if(stream.writable) {      
+      s = es.stringify()
+      s.pipe(stream)
+    } else
+      s = stream.pipe(es.split()).pipe(es.parse())
+    return s 
+  }
+}
+
+function mkFormat(fn, format) {
+  return function () {
+    return format(fn.apply(this, arguments))
+  }
+}
+
+function addFormats(fn) {
+  var f = mkFormat(fn, formats.json)
+  for(k in formats) 
+    f[k] = mkFormat(fn, formats[k])
+  return f
+}
+
+module.exports = function (endpoints) {
+
+  return function kv (basedir) {
+    //by default, use newline seperated json.
+    var emitter = new EventEmitter()
+    var keys = {}
+    var ends = endpoints(basedir)
+
+    function list() {
+      var _keys = []
+      for (var k in keys)
+        _keys.push(k)
+      return _keys
+    }
+
+    function addToKeys (data) {
+      if(data[0] = 'put')
+        keys[data[1]] = true
+      else
+        delete keys[data[1]] 
+    }
+    //wrap formats arount get and put, so you can go get.json(key) or get.raw(key)
+
+    emitter.put = addFormats(function (key, opts) {
+      var s = ends.put(key, opts)
+      emitter.emit('put', key, Date.now(), s, opts)
+      return s
+    })
+    emitter.get = addFormats(ends.get)
+    emitter.del = function (key, cb) {
+      emitter.emit('del', key, Date.now())
+      ends.del(key, cb)
+    }
+    emitter.has = ends.has
+    emitter.list = list
+
+    //TODO smarter way to compact the __list, so that can have last update.
+    var ls = emitter.put.json('__list', {flags: 'a'})
+    emitter
+      .on('put', function (key, time) {
+        if(!keys[key])
+          ls.write(['put', key, time])
+      })
+      .on('del', function (key, time) {
+        if(keys[key])
+          ls.write(['del', key, time]) 
+      })
+      .on('put', addToKeys)
+      .on('del', addToKeys)
+    
+    emitter.has('__list', function (err) {
+      if(err)
+        emitter.emit('sync')
+      else
+        emitter.get.json('__list').on('data', addToKeys).on('end', function () {
+          emitter.emit('sync')
+        })
+    })
+
+   return emitter
+  }
+}
+
+
+});
+
+require.define("/example/socket.io/chat.js", function (require, module, exports, __dirname, __filename) {
 var crdt = require('crdt')
 
 module.exports =
@@ -1907,7 +2981,7 @@ function createChat (el, doc) {
 
 });
 
-require.define("/mouses.js", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/mouses.js", function (require, module, exports, __dirname, __filename) {
 /*
   show other mouses of other users.
 
@@ -1958,7 +3032,7 @@ function (doc) {
 
 });
 
-require.define("/sets.js", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/sets.js", function (require, module, exports, __dirname, __filename) {
 var crdt = require('crdt')
 
 /*
@@ -2116,18 +3190,37 @@ function (div, doc) {
 
 });
 
-require.define("/client.js", function (require, module, exports, __dirname, __filename) {
+require.define("/example/socket.io/client.js", function (require, module, exports, __dirname, __filename) {
     
 
 var crdt    = require('crdt')
 var _bs = require('browser-stream')
 var bs = _bs(io.connect('http://localhost:3000'))
+var kv = require('kv')('crdt_example')
 
 var createChat = require('./chat')
 var createMice = require('./mouses')
 var createSets = require('./sets')
 
-var doc = new crdt.Doc()
+var doc = DOC = new crdt.Doc()
+
+function sync(doc, name) {
+  function write () {
+    doc.createReadStream({end: false}) //track changes forever
+      .pipe(kv.put(name))   
+  }
+  kv.has(name, function (err) {
+    if(err) { //the doc is new
+      doc.sync = true
+      return write() 
+    }
+    var stream = kv.get(name)
+    stream.once('end', write)
+      .pipe(doc.createWriteStream())
+  })
+}
+
+sync(doc, 'DOC')
 
 $(function () {
   var stream = crdt.createStream(doc)
@@ -2143,4 +3236,4 @@ $(function () {
 
 
 });
-require("/client.js");
+require("/example/socket.io/client.js");
