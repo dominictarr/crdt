@@ -204,6 +204,10 @@ Doc.prototype.get = function (id) {
   return this.rows[id] = this.rows[id] || this._add(new Row(id), 'local')
 }
 
+Doc.prototype.createStream = function (opts) {
+  return stream.createStream(this, opts)
+}
+
 Doc.prototype.createWriteStream = function (opts) {
   return stream.createWriteStream(this, opts)
 }
