@@ -6,7 +6,7 @@ var a    = require('assertions')
 var doc = new crdt.Doc()
 var hoc = new crdt.Doc()
 var loc = new crdt.Doc()
-
+doc.sync = hoc.sync = loc.sync = true
 var ls = crdt.sync(doc, hoc)
 var hs = crdt.sync(doc, loc)
 

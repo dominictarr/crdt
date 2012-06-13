@@ -9,7 +9,7 @@ exports.test = function (t) {
 
   var doc = new crdt.Doc()
   var hoc = new crdt.Doc()
-
+  doc.sync = hoc.sync = true
   var ds = crdt.createStream(doc)
   var hs = crdt.createStream(hoc)
 
@@ -61,6 +61,7 @@ exports.listen = function (t) {
   var doc = new crdt.Doc()
   var hoc = new crdt.Doc()
 
+  doc.sync = hoc.sync = true
   var random = Math.random()
   var thing = doc.get('thing')
   thing.on('changes', function (r) {

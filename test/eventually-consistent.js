@@ -7,6 +7,7 @@ var a    = require('assertions')
 
 var doc = new crdt.Doc()
 var hoc = new crdt.Doc()
+doc.sync = hoc.sync = true
 
 var ds = crdt.createStream(doc)
 var hs = crdt.createStream(hoc)

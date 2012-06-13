@@ -18,6 +18,8 @@ var as = crdt.createStream(a)
 var b = new crdt.Doc()
 var bs = crdt.createStream(b)
 
+a.sync = b.sync = true
+
 function rand(of) {
   var i = Math.floor(Math.random() * (of.length || of))
   return of[i] || i
