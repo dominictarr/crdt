@@ -48,9 +48,7 @@ function Set(doc, key, value) {
   this.key = key
   this.value = value
 
-  doc.sets.on(key, function (row, changed) {
-    if(changed[key] !== value) return 
-
+  function add(row) {
     array.push(row)
     rows[row.id] = row
     set.emit('add', row)
@@ -67,12 +65,23 @@ function Set(doc, key, value) {
     }
 
     row.on('changes', remove)
+ 
+  }
+
+  doc.sets.on(key, function (row, changed) {
+    if(changed[key] !== value) return 
+    add(row)
   })
 
   this.rm = this.remove = function (row) {
     row = this.get(row) 
     if(!row) return
     return row.set(key, null)
+  }
+
+  for(var id in doc.rows) {
+    var row = doc.get(id)
+    if(row.get(key) === value) add(row) 
   }
 }
 
