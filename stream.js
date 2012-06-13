@@ -119,7 +119,6 @@ function createReadStream(doc, opts) {
   opts = opts || {}
   if(opts.end !== false)
     opts.end = true
-  console.log('CRS', opts)
   var s = new Stream()
   var queue = []
 
@@ -144,7 +143,6 @@ function createReadStream(doc, opts) {
   }
 
   s.flush = function () {
-    console.log('FLUSH')
     while(queue.length && !s.paused)
       s.emit('data', queue.shift())
     if(opts.end && !queue.length && !s.paused && !s.ended) {
@@ -166,7 +164,6 @@ function createReadStream(doc, opts) {
     //emitting histroy must be deferred because downstream
     //may not yet exist.  
     //send scuttlebutt greeting
-    console.log('PIPE')
     queue.push({iam: doc.id})
 
     u.concat(queue, doc.history()) 
