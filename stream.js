@@ -38,7 +38,8 @@ function createStream (doc, opts) {
   var id = streams++ //used locally so to prevent writing update back to their source
   var s = new Stream() 
   s.writable = s.readable = true
-  var queue = []
+  opts = opts || {}
+  var queue = [], follow
   var other, recieved = {}
 
   function enqueue() {
@@ -57,9 +58,10 @@ function createStream (doc, opts) {
     //send scuttlebutt greeting
 
    queue.push({iam: doc.id, iknow: doc.recieved})
-    u.concat(queue, doc.history()) 
+    u.concat(queue, doc.history(opts.id)) 
     enqueue()
-    doc.on('update', onUpdate)
+    follow = opts.id ? doc.get(opts.id) : doc
+    follow.on('update', onUpdate)
     doc.removeListener('sync', onSync)
   }
 
@@ -108,7 +110,8 @@ function createStream (doc, opts) {
   }
 
   s.destroy = function () {  
-    doc.removeListener('update', onUpdate)
+    if(follow)
+      follow.removeListener('update', onUpdate)
     doc.removeListener('sync', onSync)
     s.emit('close')
   }

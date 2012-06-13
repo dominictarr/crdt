@@ -71,7 +71,7 @@ Doc.prototype._add = function (id, source) {
     return this.rows[id]
 
   var r = id instanceof Row ? id : new Row(id)
-  this.rows[id] = r
+  this.rows[r.id] = r
 
   function track (changes, source) {
     var update = [r.id, changes, u.timestamp(), doc.id]
@@ -161,7 +161,7 @@ Doc.prototype.update = function (update, source) {
 
 
 Doc.prototype.history = function (id) {
-  if(!arguments.length) {
+  if(!id) {
     var h = []
     for (var id in this.hist) {
       u.concat(h, this.history(id))
@@ -201,6 +201,7 @@ Doc.prototype.toJSON = function () {
 //retrive a reference to a row.
 //if the row is not created yet, create 
 Doc.prototype.get = function (id) {
+  console.log('ID', id)
   return this.rows[id] = this.rows[id] || this._add(new Row(id), 'local')
 }
 
