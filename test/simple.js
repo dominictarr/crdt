@@ -17,7 +17,6 @@ exports.test = function (t) {
 
   doc.add({id: 'abc', hello: 3})
 
-  console.log('DOC', doc)
   next(function () {
     a.deepEqual(hoc.toJSON(), doc.toJSON())
 
@@ -60,8 +59,8 @@ exports.listen = function (t) {
 
   var doc = new crdt.Doc()
   var hoc = new crdt.Doc()
-
   doc.sync = hoc.sync = true
+
   var random = Math.random()
   var thing = doc.get('thing')
   thing.on('changes', function (r) {
@@ -71,5 +70,60 @@ exports.listen = function (t) {
 
   crdt.createStream(hoc).pipe(crdt.createStream(doc))
   hoc.add({id: 'thing', random: random }) 
+}
+
+exports.single = function (t) {
+
+  var doc = new crdt.Doc()
+  var hoc = new crdt.Doc()
+  doc.sync = hoc.sync = true
+
+  //getting this weird thing...
+  function assertNormal (doc, name) {
+    a.equal(null,  doc.toJSON()['[object Object]'], name + ' should be normal')
+  }
+
+
+  //this should replicate only one document.
+  hoc.createStream({id: 'thing'})
+    .pipe(doc.createStream({id: 'thing'}))
+
+  var thing = hoc.get('thing')
+
+  assertNormal(hoc, 'hoc')
+
+  thing.set({
+    whatever: Math.random(),
+    prop: 'value',
+    number: ~~(Math.random()*92)
+  })
+
+  assertNormal(doc, 'doc')
+  assertNormal(hoc, 'hoc')
+
+  next(function () {
+
+    var hThing = hoc.get('thing')
+  assertNormal(doc, 'doc')
+  assertNormal(doc, 'hoc')
+
+
+    a.deepEqual(hThing.toJSON(), thing.toJSON())
+
+    var thing2 = hoc.get('thing2').set({random: Math.random()})
+    var hThing2 = doc.get('thing2')
+
+    console.log('HOC', hoc.toJSON())
+    console.log('DOC', doc.toJSON())
+
+    console.log(hThing2)
+
+    a.throws(function () {
+      a.deepEqual(hThing2.toJSON(), thing2.toJSON())
+    })
+
+    
+    t.end()
+  })
 }
 
