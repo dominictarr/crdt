@@ -18,8 +18,9 @@
   },
   "devDependencies": {
     "it-is": "~1.0.1",
-    "event-stream": "0.9",
-    "asynct": "1.1"
+    "event-stream": "2",
+    "asynct": "1.1",
+    "kv": "0.5"
   },
   "optionalDependencies": {}
 }
