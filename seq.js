@@ -1,4 +1,4 @@
-
+'use strict';
 var Set      = require('./set')
 var Row      = require('./row')
 var inherits = require('util').inherits

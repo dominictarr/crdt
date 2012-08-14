@@ -1,3 +1,4 @@
+'use strict';
 var b = require('between')
 
 exports.clone = 

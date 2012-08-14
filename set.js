@@ -1,3 +1,4 @@
+'use strict';
 var inherits     = require('util').inherits
 var EventEmitter = require('events').EventEmitter
 var u            = require('./utils')

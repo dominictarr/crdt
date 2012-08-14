@@ -1,4 +1,4 @@
-
+'use strict';
 var Stream       = require('stream')
 var u            = require('./utils')
 
