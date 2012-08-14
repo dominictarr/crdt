@@ -3,7 +3,7 @@ var net  = require('net')
 var crdt = require('..')
 var assert = require('assert')
 
-
+'use strict';
 /*
   this tests CRDTs over an async connection.
 
@@ -77,7 +77,8 @@ var server = net.createServer(function (sock) {
 
   //  a.pipe(b).pipe(a)
 }).listen(6464, function () {
-toJSON(bs, 'B>').pipe(net.connect(6464)).pipe(fromJSON(bs, 'B<'))
+   var client
+toJSON(bs, 'B>').pipe(client = net.connect(6464)).pipe(fromJSON(bs, 'B<'))
 
   b.on('update', eventually(function () {
     try { 
@@ -91,7 +92,9 @@ toJSON(bs, 'B>').pipe(net.connect(6464)).pipe(fromJSON(bs, 'B<'))
     console.log('EVENTUALLY; CONSISTANT! (passed)')
     
     t.end()
-    process.exit(0)
+    server.close()
+    client.destroy()
+//    process.exit(0)
   }))
 
 })
