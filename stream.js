@@ -15,7 +15,7 @@ exports.createWriteStream = createWriteStream
 
   pass in mode = scuttlebutt? 
 
-  it's necessary to waint for the first greeting but that isn't 
+  it's necessary to wait for the first greeting but that isn't 
   gonna happen when writing to disk.
 
   in that case, act a little different...
@@ -33,6 +33,7 @@ exports.createWriteStream = createWriteStream
   so should begin by writing a {iam: id} message,
   and then read that in when reading.
 */
+
 var streams = 1
 function createStream (doc, opts) {
   var id = streams++ //used locally so to prevent writing update back to their source
@@ -57,7 +58,7 @@ function createStream (doc, opts) {
     //may not yet exist.  
     //send scuttlebutt greeting
 
-   queue.push({iam: doc.id, iknow: doc.recieved})
+    queue.push({iam: doc.id, iknow: doc.recieved})
     u.concat(queue, doc.history(opts.id)) 
     enqueue()
     follow = opts.id ? doc.get(opts.id) : doc
@@ -66,7 +67,12 @@ function createStream (doc, opts) {
   }
 
   s.pipe = function (other) {
-    if(doc.sync) onSync()
+    //if _syncCount == 1 that means we are loading from the disk 
+    //for the first time delay sending messages until then.
+    //or should I remove this feature? it seriously won't happen much.
+    //we'll see if it causes problems.
+
+    if(doc.sync || doc._syncCount !== 1) onSync()
     else doc.on('sync', onSync)
     return Stream.prototype.pipe.call(this, other)
   }
@@ -186,6 +192,10 @@ function createWriteStream (doc, opts) {
   s.writable = true
   s.readable = false
   var first = false
+
+  //if the doc has not been synced,
+  //mark it as syncing...
+  //hmm. that is what _syncCount does
 
   doc._syncCount = doc._syncCount || 0
 

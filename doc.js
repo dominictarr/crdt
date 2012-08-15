@@ -157,8 +157,8 @@ Doc.prototype.update = function (update, source) {
   row.emit('update', update, changed)
   row.emit('changes', changes, changed)
   this.emit('update', update, source)
+  this.emit('row_update', row)
 }
-
 
 Doc.prototype.history = function (id) {
   if(!id) {
