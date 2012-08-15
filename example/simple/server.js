@@ -17,8 +17,6 @@ var shoe = createShoe(function (sock) {
   var mx
   sock.pipe(mx = new MuxDemux({error: false})).pipe(sock)
 
-  console.log(sock)
-
   mx.on('connection', function (s) {
     s.on('data', console.log)
     s.pipe(set.createStream()).pipe(s)
@@ -36,4 +34,4 @@ setInterval(function () {
 
 app.on('log', console.log)
 shoe.install(app.listen(4242), '/simple')
-console.log(app)
+

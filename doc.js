@@ -81,6 +81,7 @@ Doc.prototype._add = function (id, source) {
   r.on('preupdate', track)
 
   this.emit('add', r)
+  this.emit('create', r) //alias
   return r
 }
 
@@ -104,7 +105,6 @@ Doc.prototype.set = function (id, change) {
   checking if the new update is more recent
   than the hist update
   if so, replace that keys hist.
-
 */
 
 Doc.prototype.update = function (update, source) {
@@ -156,8 +156,8 @@ Doc.prototype.update = function (update, source) {
 
   row.emit('update', update, changed)
   row.emit('changes', changes, changed)
-  this.emit('update', update, source)
-  this.emit('row_update', row)
+  this.emit('update', update, source)   //rename this event to 'data' or 'diff'?
+  this.emit('row_update', row)          //rename this event to 'update'
 }
 
 Doc.prototype.history = function (id) {
