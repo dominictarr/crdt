@@ -1,15 +1,19 @@
 var crdt       = require('crdt')
 var reconnect  = require('reconnect/shoe')
 var MuxDemux   = require('mux-demux')
-//var kv         = require('kv')('crdt_example')
+var kv         = require('kv')('crdt_example')
 
 var createChat = require('./chat')
 var createMice = require('./mouses')
 var createSets = require('./sets')
 
-var doc = DOC = new crdt.Doc()
+//some data to replicate!
+var docs = {
+  todo: new crdt.Doc(),
+  chat: new crdt.Doc(),
+  mice: new crdt.Doc()
+}
 
-/*
 function sync(doc, name) {
   function write () {
     doc.createReadStream({end: false}) //track changes forever
@@ -26,21 +30,24 @@ function sync(doc, name) {
   })
 }
 
-sync(doc, 'DOC')
-*/
+sync(docs.todo, 'TODO-')
 
 $(function () {
   reconnect(function (stream) {
-    var mx = MuxDemux(), ds = doc.createStream()
+    var mx = MuxDemux()
     //connect remote to mux-demux
     stream.pipe(mx).pipe(stream)
-    //connect the crdt document through mux-demux
-    ds.pipe(mx.createStream()).pipe(ds)
+
+    //connect the crdt documents through mux-demux
+    ;['todo', 'mice', 'chat'].forEach(function (name) {
+      var ds = docs[name].createStream()
+      ds.pipe(mx.createStream({type: name})).pipe(ds)
+    })
     console.log('reconnect!')
   }).connect('/shoe')
 
-  createMice(doc)
-  createChat('#chat', doc)
-  createSets('#sets', doc)
+  createMice(docs.mice)
+  createChat('#chat', docs.chat)
+  createSets('#sets', docs.todo)
 })
 

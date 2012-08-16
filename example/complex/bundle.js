@@ -8086,6 +8086,195 @@ function extend(target) {
     return target
 }});
 
+require.define("/node_modules/kv/package.json",function(require,module,exports,__dirname,__filename,process){module.exports = {"browserify":"./client.js"}});
+
+require.define("/node_modules/kv/client.js",function(require,module,exports,__dirname,__filename,process){
+var ends = require('./endpoints-client')
+var kv   = require('./kv')
+
+module.exports = kv(ends)
+});
+
+require.define("/node_modules/kv/endpoints-client.js",function(require,module,exports,__dirname,__filename,process){var es = require('event-stream')
+
+module.exports = function (prefix, exports) {
+
+  exports = exports || {}
+
+  //put, get, del, has
+
+  exports.put = function (key, opts) {
+    var _key = prefix+':'+key
+    opts = opts || {flags: 'w'}
+    if(opts.flags !== 'a' || !localStorage[_key])
+      localStorage[_key] = ''
+    //assume write if not explicit append.
+
+    var ws = es.through(function (data) {
+      localStorage[_key] += data + '\n'
+    })
+
+    //remove readable api.
+    ws.readable = false
+    delete ws.pause
+    delete ws.resume
+
+    return ws
+  }
+
+  exports.get = function (key, opts) { 
+    var _key = prefix+':'+key
+    var array = localStorage[_key].split(/(\n)/)
+    if(!array[array.length - 1])
+      array.pop() //expecting an empty '' at the end.
+    return es.readArray(array) 
+  }
+
+  exports.del = function (key, cb) {
+    var _key = prefix+':'+key
+    process.nextTick(function () {
+      if(!localStorage[_key])
+        return cb(new Error ('no record: ' + key))
+
+      delete localStorage[prefix+':'+key]
+      cb()
+    })
+  }
+
+  exports.has = function (key, cb) {
+    var _key = prefix+':'+key
+    process.nextTick(function () {
+      if(!localStorage[_key])
+        return cb(new Error ('no record: ' + key))
+      cb()
+    })
+  }
+
+  return exports
+}
+});
+
+require.define("/node_modules/kv/kv.js",function(require,module,exports,__dirname,__filename,process){/*
+  very simple kv store setup for to be able to append to each document.
+  each value is stored in a separate file,
+  put, get, return streams
+*/
+
+var es     = require('event-stream')
+var EventEmitter = require('events').EventEmitter
+
+var formats = {
+  raw: function (stream) {
+    return stream
+  },
+  json: function (stream, key) {
+    /*
+      if anyone ever wants to use this for something other than
+      new line seperated json, this will need to be modified.
+      because the __list record will still be a stream of arrays.
+
+      either handle it differently, by it's key,
+      or make it possible to by-pass the streamer, or add a header or something.
+      hmm. or a way to force it to write a raw stream.
+
+      or maybe just have a separate set of records for headers?
+      or the first line?
+
+      I know:
+
+        you go: get[format](key) //and can add more formats. json, raw, etc.
+    */
+    var s
+    stream.once('close', function () {
+      s.emit('close')
+    })
+    if(stream.writable) {      
+      s = es.stringify()
+      s.pipe(stream)
+    } else
+      s = stream.pipe(es.split()).pipe(es.parse())
+    return s 
+  }
+}
+
+function mkFormat(fn, format) {
+  return function () {
+    return format(fn.apply(this, arguments))
+  }
+}
+
+function addFormats(fn) {
+  var f = mkFormat(fn, formats.json)
+  for(k in formats) 
+    f[k] = mkFormat(fn, formats[k])
+  return f
+}
+
+module.exports = function (endpoints) {
+
+  return function kv (basedir) {
+    //by default, use newline seperated json.
+    var emitter = new EventEmitter()
+    var keys = {}
+    var ends = endpoints(basedir)
+
+    function list() {
+      var _keys = []
+      for (var k in keys)
+        _keys.push(k)
+      return _keys
+    }
+
+    function addToKeys (key, time, stream) {
+      if(stream)
+        keys[key] = true
+      else
+        delete keys[key] 
+    }
+    //wrap formats arount get and put, so you can go get.json(key) or get.raw(key)
+
+    emitter.put = addFormats(function (key, opts) {
+      var s = ends.put(key, opts)
+      emitter.emit('put', key, Date.now(), s, opts)
+      return s
+    })
+    emitter.get = addFormats(ends.get)
+    emitter.del = function (key, cb) {
+      emitter.emit('del', key, Date.now())
+      ends.del(key, cb)
+    }
+    emitter.has = ends.has
+    emitter.list = list
+
+    //TODO smarter way to compact the __list, so that can have last update.
+    var ls = emitter.put.json('__list', {flags: 'a'})
+    emitter
+      .on('put', function (key, time) {
+        if(!keys[key])
+          ls.write(['put', key, time])
+      })
+      .on('del', function (key, time) {
+        if(keys[key])
+          ls.write(['del', key, time]) 
+      })
+      .on('put', addToKeys)
+      .on('del', addToKeys)
+    
+    emitter.has('__list', function (err) {
+      if(err)
+        emitter.emit('sync')
+      else
+        emitter.get.json('__list').on('data', addToKeys).on('end', function () {
+          emitter.emit('sync')
+        })
+    })
+
+   return emitter
+  }
+}
+
+});
+
 require.define("/example/complex/chat.js",function(require,module,exports,__dirname,__filename,process){var crdt = require('crdt')
 
 module.exports =
@@ -8356,15 +8545,19 @@ function (div, doc) {
 require.define("/example/complex/client.js",function(require,module,exports,__dirname,__filename,process){var crdt       = require('crdt')
 var reconnect  = require('reconnect/shoe')
 var MuxDemux   = require('mux-demux')
-//var kv         = require('kv')('crdt_example')
+var kv         = require('kv')('crdt_example')
 
 var createChat = require('./chat')
 var createMice = require('./mouses')
 var createSets = require('./sets')
 
-var doc = DOC = new crdt.Doc()
+//some data to replicate!
+var docs = {
+  todo: new crdt.Doc(),
+  chat: new crdt.Doc(),
+  mice: new crdt.Doc()
+}
 
-/*
 function sync(doc, name) {
   function write () {
     doc.createReadStream({end: false}) //track changes forever
@@ -8381,22 +8574,25 @@ function sync(doc, name) {
   })
 }
 
-sync(doc, 'DOC')
-*/
+sync(docs.todo, 'TODO-')
 
 $(function () {
   reconnect(function (stream) {
-    var mx = MuxDemux(), ds = doc.createStream()
+    var mx = MuxDemux()
     //connect remote to mux-demux
     stream.pipe(mx).pipe(stream)
-    //connect the crdt document through mux-demux
-    ds.pipe(mx.createStream()).pipe(ds)
+
+    //connect the crdt documents through mux-demux
+    ;['todo', 'mice', 'chat'].forEach(function (name) {
+      var ds = docs[name].createStream()
+      ds.pipe(mx.createStream({type: name})).pipe(ds)
+    })
     console.log('reconnect!')
   }).connect('/shoe')
 
-  createMice(doc)
-  createChat('#chat', doc)
-  createSets('#sets', doc)
+  createMice(docs.mice)
+  createChat('#chat', docs.chat)
+  createSets('#sets', docs.todo)
 })
 
 });
