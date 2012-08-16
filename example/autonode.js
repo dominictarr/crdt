@@ -9,6 +9,11 @@ var m = new crdt.Doc()
 
 if(!module.parent) {
 
+  if(!opts.name) {
+    console.error('usage: node autonode.js --name NAME')
+    process.exit(1)
+  }
+
   autonode(function (stream) {
     stream
       .pipe(es.split())
