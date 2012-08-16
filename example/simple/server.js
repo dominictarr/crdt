@@ -2,7 +2,6 @@ var crdt       = require('../..')
 var connect    = require('express') //require('connect')
 var es         = require('event-stream')
 var createShoe = require('shoe')
-var MuxDemux   = require('mux-demux')
 
 var app = connect()
   .use(connect.static(__dirname))
@@ -14,13 +13,13 @@ set.on('row_update', function (row) {
 })
 
 var shoe = createShoe(function (sock) {
-  var mx
-  sock.pipe(mx = new MuxDemux({error: false})).pipe(sock)
-
-  mx.on('connection', function (s) {
-    s.on('data', console.log)
-    s.pipe(set.createStream()).pipe(s)
-  })
+    //connect to the crdt stream
+    sock
+      .pipe(es.split())
+      .pipe(es.parse())
+      .pipe(set.createStream())
+      .pipe(es.stringify())
+      .pipe(sock)
 })
 
 
@@ -33,5 +32,5 @@ setInterval(function () {
 }, 1e3)
 
 app.on('log', console.log)
-shoe.install(app.listen(4242), '/simple')
+shoe.install(app.listen(3000), '/simple')
 

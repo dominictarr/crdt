@@ -1,8 +1,8 @@
 var crdt       = require('../..')
 var reconnect  = require('reconnect/shoe')
-var MuxDemux   = require('mux-demux')
 var $=window.$ = require('jquery-browserify')
 var heartbeat  = require('./heartbeat')
+var es         = require('event-stream')
 
 var doc = window.DOC = new crdt.Doc()
 
@@ -29,23 +29,14 @@ $(function () {
 
   //connect, and then reconnect after wifi goes down.
   reconnect(function (shoe) {
-    var mx
-
-    //set up the base stream.
-    shoe.pipe(mx = new MuxDemux({error: false})).pipe(shoe)
-
-    mx.pipe(shoe).pipe(mx)
-
-    // create streams with mx! to send
-    // make as many as you like,
-    // with out the overhead of a whole tcp connection.
-    var ds = mx.createStream({
-      type:'crdt', //not mandatory
-      id: me.id       //just to show you can send metadata.
-    })
 
     //connect to the crdt stream
-    ds.pipe(doc.createStream()).pipe(ds)
+    shoe
+      .pipe(es.split())
+      .pipe(es.parse())
+      .pipe(doc.createStream())
+      .pipe(es.stringify())
+      .pipe(shoe)
 
   }).connect('/simple')
 
