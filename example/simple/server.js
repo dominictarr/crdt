@@ -2,13 +2,15 @@ var crdt       = require('../..')
 var connect    = require('express') //require('connect')
 var es         = require('event-stream')
 var createShoe = require('shoe')
+var heartbeat  = require('./heartbeat')
 
 var app = connect()
   .use(connect.static(__dirname))
 
-var set = new crdt.Doc()
+var doc = new crdt.Doc()
+heartbeat(doc, 'Server')
 
-set.on('row_update', function (row) {
+doc.on('row_update', function (row) {
   console.log(row.toJSON())
 })
 
@@ -17,19 +19,16 @@ var shoe = createShoe(function (sock) {
     sock
       .pipe(es.split())
       .pipe(es.parse())
-      .pipe(set.createStream())
+      .pipe(doc.createStream())
       .pipe(es.stringify())
       .pipe(sock)
 })
 
 
-var n = set.set('server', {
+/*var n = doc.set('server', {
   name: 'server', create: new Date(), heartbeat: Date.now()
 })
-
-setInterval(function () {
-  n.set('heartbeat', Date.now())
-}, 1e3)
+*/
 
 app.on('log', console.log)
 shoe.install(app.listen(3000), '/simple')

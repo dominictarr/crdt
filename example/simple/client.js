@@ -7,13 +7,14 @@ var es         = require('event-stream')
 var doc = window.DOC = new crdt.Doc()
 
 function render(row) {
-  var l 
   var r = row.toJSON()
-  l = '<div id='+ r.id +'> id: '+ r.id +
-      ' created:'+ r.create +
-      ', heartbeat:'+ r.heartbeat +
-      '</div>'
-  return $(l)
+  return (
+      '<div id='+ r.id +' class=heartbeat>'
+       + ['id', 'create', 'heartbeat'].map(function (k) {
+          return '<div><span class=key>'+k+'</span><span class=value>'+r[k]+'</span></div>'
+        }).join('\n')
+      + '</div>' 
+    )
 }
 
 $(function () {
