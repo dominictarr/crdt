@@ -8574,7 +8574,7 @@ function sync(doc, name) {
   })
 }
 
-sync(docs.todo, 'TODO-')
+sync(docs.todo, 'TODO2-')
 
 $(function () {
   reconnect(function (stream) {
