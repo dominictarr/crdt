@@ -18,10 +18,10 @@
   },
   "devDependencies": {
     "it-is": "~1.0.1",
-    "event-stream": "~2",
+    "event-stream": "~3.0",
     "asynct": "~1.1",
     "kv": "~0.5",
-    "mux-demux": "~2.3"
+    "mux-demux": "~3.2"
   },
   "optionalDependencies": {}
 }
