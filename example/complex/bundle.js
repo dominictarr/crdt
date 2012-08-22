@@ -1894,6 +1894,7 @@ Set.prototype.get = function (id) {
 });
 
 require.define("/example/complex/node_modules/crdt/seq.js",function(require,module,exports,__dirname,__filename,process){'use strict';
+
 var Set      = require('./set')
 var Row      = require('./row')
 var inherits = require('util').inherits
@@ -1941,7 +1942,6 @@ function Seq (doc, key, val) {
 
     before = toKey(this.get(before) || '!')
     after  = toKey(this.get(after)  || '~')
-
 
     //must get id from the doc,
     //because may be moving this item into this set.
@@ -4904,11 +4904,7 @@ function MuxDemux (opts, onConnection) {
   }
 
 
-  //the problem here, is that this is registering the first
-  //event listener.
-  //and so in this test, the close message is 
-  //getting to the other side first
- md.pause = function () {}
+  md.pause = function () {}
   md.resume = function () {}
 
   function createStream(id, meta, opts) {
@@ -4955,6 +4951,14 @@ function MuxDemux (opts, onConnection) {
   if(onConnection)
     outer.on('connection', onConnection)
 
+  outer.on('connection', function (stream) {
+    //if mux-demux recieves a stream but there is nothing to handle it,
+    //then return an error to the other side.
+    //still trying to think of the best error message.
+    if(outer.listeners('connection').length === 1)
+      stream.error('remote end lacks connection listener')
+  })
+
   var pipe = outer.pipe
   outer.pipe = function (dest, opts) {
     pipe.call(outer, dest, opts)
@@ -4984,6 +4988,7 @@ function MuxDemux (opts, onConnection) {
 }
 
 module.exports = MuxDemux
+
 });
 
 require.define("/node_modules/event-stream/package.json",function(require,module,exports,__dirname,__filename,process){module.exports = {}});
@@ -5000,11 +5005,15 @@ var Stream = require('stream').Stream
   , through = require('through')
   , from = require('from')
   , duplex = require('duplexer')
+  , map = require('map-stream')
+  , pause = require('pause-stream')
 
 es.Stream = Stream //re-export Stream from core
 es.through = through
 es.from = from
 es.duplex = duplex
+es.map = map
+es.pause = pause
 
 // merge / concat
 //
@@ -5165,98 +5174,6 @@ es.readable = function (func, continueOnError) {
 }
 
 
-//create an event stream and apply function to each .write
-//emitting each response as data
-//unless it's an empty callback
-
-es.map = function (mapper) {
-  var stream = new Stream()
-    , inputs = 0
-    , outputs = 0
-    , ended = false
-    , paused = false
-    , destroyed = false
-
-  stream.writable = true
-  stream.readable = true
-   
-  stream.write = function () {
-    if(ended) throw new Error('map stream is not writable')
-    inputs ++
-    var args = [].slice.call(arguments)
-      , r
-      , inNext = false 
-    //pipe only allows one argument. so, do not 
-    function next (err) {
-      if(destroyed) return
-      inNext = true
-      outputs ++
-      var args = [].slice.call(arguments)
-      if(err) {
-        args.unshift('error')
-        return inNext = false, stream.emit.apply(stream, args)
-      }
-      args.shift() //drop err
-      if (args.length) {
-        args.unshift('data')
-        r = stream.emit.apply(stream, args)
-      }
-      if(inputs == outputs) {
-        if(paused) paused = false, stream.emit('drain') //written all the incoming events
-        if(ended) end()
-      }
-      inNext = false
-    }
-    args.push(next)
-    
-    try {
-      //catch sync errors and handle them like async errors
-      var written = mapper.apply(null, args)
-      paused = (written === false)
-      return !paused
-    } catch (err) {
-      //if the callback has been called syncronously, and the error
-      //has occured in an listener, throw it again.
-      if(inNext)
-        throw err
-      next(err)
-      return !paused
-    }
-  }
-
-  function end (data) {
-    //if end was called with args, write it, 
-    ended = true //write will emit 'end' if ended is true
-    stream.writable = false
-    if(data !== undefined)
-      return stream.write(data)
-    else if (inputs == outputs) //wait for processing 
-      stream.readable = false, stream.emit('end'), stream.destroy() 
-  }
-
-  stream.end = function (data) {
-    if(ended) return
-    end()
-  }
-
-  stream.destroy = function () {
-    ended = destroyed = true
-    stream.writable = stream.readable = paused = false
-    process.nextTick(function () {
-      stream.emit('close')
-    })
-  }
-  stream.pause = function () {
-    paused = true
-  }
-
-  stream.resume = function () {
-    paused = false
-  }
-
-  return stream
-}
-
 
 //
 // map sync
@@ -5354,61 +5271,6 @@ es.split = function (matcher) {
       this.emit('data', soFar)  
     this.emit('end')
   })
-}
-
-//
-// gate 
-//
-// while the gate is shut(), buffer incoming. 
-// 
-// if gate is open() stream like normal.
-//
-// currently, when opened, this will emit all data unless it is shut again
-// if downstream pauses it will still write, i'd like to make it respect pause, 
-// but i'll need a test case first.
-
-es.gate = function (shut) {
-
-  var stream = new Stream()
-    , queue = []
-    , ended = false
-
-    shut = (shut === false ? false : true) //default to shut
-
-  stream.writable = true
-  stream.readable = true
-
-  stream.isShut = function () { return shut }
-  stream.shut   = function () { shut = true }
-  stream.open   = function () { shut = false; maybe() }
-  
-  function maybe () {
-    while(queue.length && !shut) {
-      var args = queue.shift()
-      args.unshift('data')
-      stream.emit.apply(stream, args)
-    }
-    stream.emit('drain')
-    if(ended && !shut) 
-      stream.emit('end')
-  }
-  
-  stream.write = function () {
-    var args = [].slice.call(arguments)
-  
-    queue.push(args)
-    if (shut) return false //pause up stream pipes  
-
-    maybe()
-  }
-
-  stream.end = function () {
-    ended = true
-    if (!queue.length)
-      stream.emit('end')
-  }
-
-  return stream
 }
 
 //
@@ -5524,61 +5386,7 @@ var setup = function (args) {
 es.pipeable = function () {
   console.error('warn: event-stream. I have decided that pipeable is a kitchen-sick and will remove soon if no objections')
   console.error('please post an issue if you actually use this. -- dominictarr')
-
-  if(process.title != 'node')
-    return console.error('cannot use es.pipeable in the browser')
-  //(require) inside brackets to fool browserify, because this does not make sense in the browser.
-  var opts = (require)('optimist').argv
-  var args = [].slice.call(arguments)
-  
-  if(opts.h || opts.help) {
-    var name = process.argv[1]
-    console.error([
-      'Usage:',
-      '',
-      'node ' + name + ' [options]',
-      '  --port PORT        turn this stream into a server',
-      '  --host HOST        host of server (localhost is default)',
-      '  --protocol         protocol http|net will require(protocol).createServer(...',
-      '  --help             display this message',
-      '',
-      ' if --port is not set, will stream input from stdin',
-      '',
-      'also, pipe from or to files:',
-      '',
-      ' node '+name+ ' < file    #pipe from file into this stream',
-      ' node '+name+ ' < infile > outfile    #pipe from file into this stream',     
-      '',
-    ].join('\n'))
-  
-  } else if (!opts.port) {
-    var streams = setup(args)
-    streams.unshift(es.split())
-    //streams.unshift()
-    streams.push(process.stdout)
-    var c = es.pipeline.apply(null, streams)
-    process.openStdin().pipe(c) //there
-    return c
-
-  } else {
-  
-    opts.host = opts.host || 'localhost'
-    opts.protocol = opts.protocol || 'http'
-    
-    var protocol = (require)(opts.protocol)
-        
-    var server = protocol.createServer(function (instream, outstream) {  
-      var streams = setup(args)
-      streams.unshift(es.split())
-      streams.unshift(instream)
-      streams.push(outstream || instream)
-      es.pipe.apply(null, streams)
-    })
-    
-    server.listen(opts.port, opts.host)
-
-    console.error(process.argv[1] +' is listening for "' + opts.protocol + '" on ' + opts.host + ':' + opts.port)  
-  }
+  throw new Error('[EVENT-STREAM] es.pipeable is deprecated')
 }
 });
 
@@ -5799,6 +5607,195 @@ function duplex(writer, reader) {
         stream.emit.apply(stream, args)
     }
 }});
+
+require.define("/node_modules/event-stream/node_modules/map-stream/package.json",function(require,module,exports,__dirname,__filename,process){module.exports = {}});
+
+require.define("/node_modules/event-stream/node_modules/map-stream/index.js",function(require,module,exports,__dirname,__filename,process){//filter will reemit the data if cb(err,pass) pass is truthy
+
+// reduce is more tricky
+// maybe we want to group the reductions or emit progress updates occasionally
+// the most basic reduce just emits one 'data' event after it has recieved 'end'
+
+
+var Stream = require('stream').Stream
+
+
+//create an event stream and apply function to each .write
+//emitting each response as data
+//unless it's an empty callback
+
+module.exports = function (mapper) {
+  var stream = new Stream()
+    , inputs = 0
+    , outputs = 0
+    , ended = false
+    , paused = false
+    , destroyed = false
+
+  stream.writable = true
+  stream.readable = true
+   
+  stream.write = function () {
+    if(ended) throw new Error('map stream is not writable')
+    inputs ++
+    var args = [].slice.call(arguments)
+      , r
+      , inNext = false 
+    //pipe only allows one argument. so, do not 
+    function next (err) {
+      if(destroyed) return
+      inNext = true
+      outputs ++
+      var args = [].slice.call(arguments)
+      if(err) {
+        args.unshift('error')
+        return inNext = false, stream.emit.apply(stream, args)
+      }
+      args.shift() //drop err
+      if (args.length) {
+        args.unshift('data')
+        r = stream.emit.apply(stream, args)
+      }
+      if(inputs == outputs) {
+        if(paused) paused = false, stream.emit('drain') //written all the incoming events
+        if(ended) end()
+      }
+      inNext = false
+    }
+    args.push(next)
+    
+    try {
+      //catch sync errors and handle them like async errors
+      var written = mapper.apply(null, args)
+      paused = (written === false)
+      return !paused
+    } catch (err) {
+      //if the callback has been called syncronously, and the error
+      //has occured in an listener, throw it again.
+      if(inNext)
+        throw err
+      next(err)
+      return !paused
+    }
+  }
+
+  function end (data) {
+    //if end was called with args, write it, 
+    ended = true //write will emit 'end' if ended is true
+    stream.writable = false
+    if(data !== undefined)
+      return stream.write(data)
+    else if (inputs == outputs) //wait for processing 
+      stream.readable = false, stream.emit('end'), stream.destroy() 
+  }
+
+  stream.end = function (data) {
+    if(ended) return
+    end()
+  }
+
+  stream.destroy = function () {
+    ended = destroyed = true
+    stream.writable = stream.readable = paused = false
+    process.nextTick(function () {
+      stream.emit('close')
+    })
+  }
+  stream.pause = function () {
+    paused = true
+  }
+
+  stream.resume = function () {
+    paused = false
+  }
+
+  return stream
+}
+
+
+
+
+});
+
+require.define("/node_modules/event-stream/node_modules/pause-stream/package.json",function(require,module,exports,__dirname,__filename,process){module.exports = {"main":"index.js"}});
+
+require.define("/node_modules/event-stream/node_modules/pause-stream/index.js",function(require,module,exports,__dirname,__filename,process){var Stream = require('stream')
+
+/*
+  was gonna use through for this,
+  but it does not match quite right,
+  because you need a seperate pause
+  mechanism for the readable and writable
+  sides.
+*/
+
+module.exports = function () {
+  var buffer = [], ended = false, destroyed = false
+  var stream = new Stream() 
+  stream.writable = stream.readable = true
+  stream.paused = false 
+  
+  stream.write = function (data) {
+    if(!this.paused)
+      this.emit('data', data)
+    else 
+      buffer.push(data)
+    return !(this.paused || buffer.length)
+  }
+  function onEnd () {
+    stream.readable = false
+    stream.emit('end')
+    process.nextTick(stream.destroy.bind(stream))
+  }
+  stream.end = function (data) {
+    if(data) this.write(data)
+    this.ended = true
+    this.writable = false
+    if(!(this.paused || buffer.length))
+      return onEnd()
+    else
+      this.once('drain', onEnd)
+    this.drain()
+  }
+
+  stream.drain = function () {
+    while(!this.paused && buffer.length)
+      this.emit('data', buffer.shift())
+    //if the buffer has emptied. emit drain.
+    if(!buffer.length && !this.paused)
+      this.emit('drain')
+  }
+
+  stream.resume = function () {
+    //this is where I need pauseRead, and pauseWrite.
+    //here the reading side is unpaused,
+    //but the writing side may still be paused.
+    //the whole buffer might not empity at once.
+    //it might pause again.
+    //the stream should never emit data inbetween pause()...resume()
+    //and write should return !buffer.length
+
+    this.paused = false
+//    process.nextTick(this.drain.bind(this)) //will emit drain if buffer empties.
+    this.drain()
+    return this
+  }
+
+  stream.destroy = function () {
+    if(destroyed) return
+    destroyed = ended = true     
+    buffer.length = 0
+    this.emit('close')
+  }
+
+  stream.pause = function () {
+    stream.paused = true
+    return this
+  }
+ 
+  return stream
+}
+});
 
 require.define("buffer",function(require,module,exports,__dirname,__filename,process){module.exports = require("buffer-browserify")});
 
@@ -7527,547 +7524,6 @@ exports.writeIEEE754 = function(buffer, value, offset, isBE, mLen, nBytes) {
 };
 });
 
-require.define("/node_modules/event-stream/node_modules/optimist/package.json",function(require,module,exports,__dirname,__filename,process){module.exports = {"main":"./index.js"}});
-
-require.define("/node_modules/event-stream/node_modules/optimist/index.js",function(require,module,exports,__dirname,__filename,process){var path = require('path');
-var wordwrap = require('wordwrap');
-
-/*  Hack an instance of Argv with process.argv into Argv
-    so people can do
-        require('optimist')(['--beeble=1','-z','zizzle']).argv
-    to parse a list of args and
-        require('optimist').argv
-    to get a parsed version of process.argv.
-*/
-
-var inst = Argv(process.argv.slice(2));
-Object.keys(inst).forEach(function (key) {
-    Argv[key] = typeof inst[key] == 'function'
-        ? inst[key].bind(inst)
-        : inst[key];
-});
-
-var exports = module.exports = Argv;
-function Argv (args, cwd) {
-    var self = {};
-    if (!cwd) cwd = process.cwd();
-    
-    self.$0 = process.argv
-        .slice(0,2)
-        .map(function (x) {
-            var b = rebase(cwd, x);
-            return x.match(/^\//) && b.length < x.length
-                ? b : x
-        })
-        .join(' ')
-    ;
-    
-    if (process.argv[1] == process.env._) {
-        self.$0 = process.env._.replace(
-            path.dirname(process.execPath) + '/', ''
-        );
-    }
-    
-    var flags = { bools : {}, strings : {} };
-    
-    self.boolean = function (bools) {
-        if (!Array.isArray(bools)) {
-            bools = [].slice.call(arguments);
-        }
-        
-        bools.forEach(function (name) {
-            flags.bools[name] = true;
-        });
-        
-        return self;
-    };
-    
-    self.string = function (strings) {
-        if (!Array.isArray(strings)) {
-            strings = [].slice.call(arguments);
-        }
-        
-        strings.forEach(function (name) {
-            flags.strings[name] = true;
-        });
-        
-        return self;
-    };
-    
-    var aliases = {};
-    self.alias = function (x, y) {
-        if (typeof x === 'object') {
-            Object.keys(x).forEach(function (key) {
-                self.alias(key, x[key]);
-            });
-        }
-        else if (Array.isArray(y)) {
-            y.forEach(function (yy) {
-                self.alias(x, yy);
-            });
-        }
-        else {
-            var zs = (aliases[x] || []).concat(aliases[y] || []).concat(x, y);
-            aliases[x] = zs.filter(function (z) { return z != x });
-            aliases[y] = zs.filter(function (z) { return z != y });
-        }
-        
-        return self;
-    };
-    
-    var demanded = {};
-    self.demand = function (keys) {
-        if (typeof keys == 'number') {
-            if (!demanded._) demanded._ = 0;
-            demanded._ += keys;
-        }
-        else if (Array.isArray(keys)) {
-            keys.forEach(function (key) {
-                self.demand(key);
-            });
-        }
-        else {
-            demanded[keys] = true;
-        }
-        
-        return self;
-    };
-    
-    var usage;
-    self.usage = function (msg, opts) {
-        if (!opts && typeof msg === 'object') {
-            opts = msg;
-            msg = null;
-        }
-        
-        usage = msg;
-        
-        if (opts) self.options(opts);
-        
-        return self;
-    };
-    
-    function fail (msg) {
-        self.showHelp();
-        if (msg) console.error(msg);
-        process.exit(1);
-    }
-    
-    var checks = [];
-    self.check = function (f) {
-        checks.push(f);
-        return self;
-    };
-    
-    var defaults = {};
-    self.default = function (key, value) {
-        if (typeof key === 'object') {
-            Object.keys(key).forEach(function (k) {
-                self.default(k, key[k]);
-            });
-        }
-        else {
-            defaults[key] = value;
-        }
-        
-        return self;
-    };
-    
-    var descriptions = {};
-    self.describe = function (key, desc) {
-        if (typeof key === 'object') {
-            Object.keys(key).forEach(function (k) {
-                self.describe(k, key[k]);
-            });
-        }
-        else {
-            descriptions[key] = desc;
-        }
-        return self;
-    };
-    
-    self.parse = function (args) {
-        return Argv(args).argv;
-    };
-    
-    self.option = self.options = function (key, opt) {
-        if (typeof key === 'object') {
-            Object.keys(key).forEach(function (k) {
-                self.options(k, key[k]);
-            });
-        }
-        else {
-            if (opt.alias) self.alias(key, opt.alias);
-            if (opt.demand) self.demand(key);
-            if (opt.default) self.default(key, opt.default);
-            
-            if (opt.boolean || opt.type === 'boolean') {
-                self.boolean(key);
-            }
-            if (opt.string || opt.type === 'string') {
-                self.string(key);
-            }
-            
-            var desc = opt.describe || opt.description || opt.desc;
-            if (desc) {
-                self.describe(key, desc);
-            }
-        }
-        
-        return self;
-    };
-    
-    var wrap = null;
-    self.wrap = function (cols) {
-        wrap = cols;
-        return self;
-    };
-    
-    self.showHelp = function (fn) {
-        if (!fn) fn = console.error;
-        fn(self.help());
-    };
-    
-    self.help = function () {
-        var keys = Object.keys(
-            Object.keys(descriptions)
-            .concat(Object.keys(demanded))
-            .concat(Object.keys(defaults))
-            .reduce(function (acc, key) {
-                if (key !== '_') acc[key] = true;
-                return acc;
-            }, {})
-        );
-        
-        var help = keys.length ? [ 'Options:' ] : [];
-        
-        if (usage) {
-            help.unshift(usage.replace(/\$0/g, self.$0), '');
-        }
-        
-        var switches = keys.reduce(function (acc, key) {
-            acc[key] = [ key ].concat(aliases[key] || [])
-                .map(function (sw) {
-                    return (sw.length > 1 ? '--' : '-') + sw
-                })
-                .join(', ')
-            ;
-            return acc;
-        }, {});
-        
-        var switchlen = longest(Object.keys(switches).map(function (s) {
-            return switches[s] || '';
-        }));
-        
-        var desclen = longest(Object.keys(descriptions).map(function (d) { 
-            return descriptions[d] || '';
-        }));
-        
-        keys.forEach(function (key) {
-            var kswitch = switches[key];
-            var desc = descriptions[key] || '';
-            
-            if (wrap) {
-                desc = wordwrap(switchlen + 4, wrap)(desc)
-                    .slice(switchlen + 4)
-                ;
-            }
-            
-            var spadding = new Array(
-                Math.max(switchlen - kswitch.length + 3, 0)
-            ).join(' ');
-            
-            var dpadding = new Array(
-                Math.max(desclen - desc.length + 1, 0)
-            ).join(' ');
-            
-            var type = null;
-            
-            if (flags.bools[key]) type = '[boolean]';
-            if (flags.strings[key]) type = '[string]';
-            
-            if (!wrap && dpadding.length > 0) {
-                desc += dpadding;
-            }
-            
-            var prelude = '  ' + kswitch + spadding;
-            var extra = [
-                type,
-                demanded[key]
-                    ? '[required]'
-                    : null
-                ,
-                defaults[key] !== undefined
-                    ? '[default: ' + JSON.stringify(defaults[key]) + ']'
-                    : null
-                ,
-            ].filter(Boolean).join('  ');
-            
-            var body = [ desc, extra ].filter(Boolean).join('  ');
-            
-            if (wrap) {
-                var dlines = desc.split('\n');
-                var dlen = dlines.slice(-1)[0].length
-                    + (dlines.length === 1 ? prelude.length : 0)
-                
-                body = desc + (dlen + extra.length > wrap - 2
-                    ? '\n'
-                        + new Array(wrap - extra.length + 1).join(' ')
-                        + extra
-                    : new Array(wrap - extra.length - dlen + 1).join(' ')
-                        + extra
-                );
-            }
-            
-            help.push(prelude + body);
-        });
-        
-        help.push('');
-        return help.join('\n');
-    };
-    
-    Object.defineProperty(self, 'argv', {
-        get : parseArgs,
-        enumerable : true,
-    });
-    
-    function parseArgs () {
-        var argv = { _ : [], $0 : self.$0 };
-        Object.keys(flags.bools).forEach(function (key) {
-            setArg(key, defaults[key] || false);
-        });
-        
-        function setArg (key, val) {
-            var num = Number(val);
-            var value = typeof val !== 'string' || isNaN(num) ? val : num;
-            if (flags.strings[key]) value = val;
-            
-            if (key in argv && !flags.bools[key]) {
-                if (!Array.isArray(argv[key])) {
-                    argv[key] = [ argv[key] ];
-                }
-                argv[key].push(value);
-            }
-            else {
-                argv[key] = value;
-            }
-            
-            (aliases[key] || []).forEach(function (x) {
-                argv[x] = argv[key];
-            });
-        }
-        
-        for (var i = 0; i < args.length; i++) {
-            var arg = args[i];
-            
-            if (arg === '--') {
-                argv._.push.apply(argv._, args.slice(i + 1));
-                break;
-            }
-            else if (arg.match(/^--.+=/)) {
-                var m = arg.match(/^--([^=]+)=(.*)/);
-                setArg(m[1], m[2]);
-            }
-            else if (arg.match(/^--no-.+/)) {
-                var key = arg.match(/^--no-(.+)/)[1];
-                setArg(key, false);
-            }
-            else if (arg.match(/^--.+/)) {
-                var key = arg.match(/^--(.+)/)[1];
-                var next = args[i + 1];
-                if (next !== undefined && !next.match(/^-/)
-                && !flags.bools[key]) {
-                    setArg(key, next);
-                    i++;
-                }
-                else if (flags.bools[key] && /true|false/.test(next)) {
-                    setArg(key, next === 'true');
-                    i++;
-                }
-                else {
-                    setArg(key, true);
-                }
-            }
-            else if (arg.match(/^-[^-]+/)) {
-                var letters = arg.slice(1,-1).split('');
-                
-                var broken = false;
-                for (var j = 0; j < letters.length; j++) {
-                    if (letters[j+1] && letters[j+1].match(/\W/)) {
-                        setArg(letters[j], arg.slice(j+2));
-                        broken = true;
-                        break;
-                    }
-                    else {
-                        setArg(letters[j], true);
-                    }
-                }
-                
-                if (!broken) {
-                    var key = arg.slice(-1)[0];
-                    
-                    if (args[i+1] && !args[i+1].match(/^-/)
-                    && !flags.bools[key]) {
-                        setArg(key, args[i+1]);
-                        i++;
-                    }
-                    else if (args[i+1] && flags.bools[key] && /true|false/.test(args[i+1])) {
-                        setArg(key, args[i+1] === 'true');
-                        i++;
-                    }
-                    else {
-                        setArg(key, true);
-                    }
-                }
-            }
-            else {
-                var n = Number(arg);
-                argv._.push(flags.strings['_'] || isNaN(n) ? arg : n);
-            }
-        }
-        
-        Object.keys(defaults).forEach(function (key) {
-            if (!(key in argv)) {
-                argv[key] = defaults[key];
-            }
-        });
-        
-        if (demanded._ && argv._.length < demanded._) {
-            fail('Not enough non-option arguments: got '
-                + argv._.length + ', need at least ' + demanded._
-            );
-        }
-        
-        var missing = [];
-        Object.keys(demanded).forEach(function (key) {
-            if (!argv[key]) missing.push(key);
-        });
-        
-        if (missing.length) {
-            fail('Missing required arguments: ' + missing.join(', '));
-        }
-        
-        checks.forEach(function (f) {
-            try {
-                if (f(argv) === false) {
-                    fail('Argument check failed: ' + f.toString());
-                }
-            }
-            catch (err) {
-                fail(err)
-            }
-        });
-        
-        return argv;
-    }
-    
-    function longest (xs) {
-        return Math.max.apply(
-            null,
-            xs.map(function (x) { return x.length })
-        );
-    }
-    
-    return self;
-};
-
-// rebase an absolute path to a relative one with respect to a base directory
-// exported for tests
-exports.rebase = rebase;
-function rebase (base, dir) {
-    var ds = path.normalize(dir).split('/').slice(1);
-    var bs = path.normalize(base).split('/').slice(1);
-    
-    for (var i = 0; ds[i] && ds[i] == bs[i]; i++);
-    ds.splice(0, i); bs.splice(0, i);
-    
-    var p = path.normalize(
-        bs.map(function () { return '..' }).concat(ds).join('/')
-    ).replace(/\/$/,'').replace(/^$/, '.');
-    return p.match(/^[.\/]/) ? p : './' + p;
-};
-});
-
-require.define("/node_modules/event-stream/node_modules/optimist/node_modules/wordwrap/package.json",function(require,module,exports,__dirname,__filename,process){module.exports = {"main":"./index.js"}});
-
-require.define("/node_modules/event-stream/node_modules/optimist/node_modules/wordwrap/index.js",function(require,module,exports,__dirname,__filename,process){var wordwrap = module.exports = function (start, stop, params) {
-    if (typeof start === 'object') {
-        params = start;
-        start = params.start;
-        stop = params.stop;
-    }
-    
-    if (typeof stop === 'object') {
-        params = stop;
-        start = start || params.start;
-        stop = undefined;
-    }
-    
-    if (!stop) {
-        stop = start;
-        start = 0;
-    }
-    
-    if (!params) params = {};
-    var mode = params.mode || 'soft';
-    var re = mode === 'hard' ? /\b/ : /(\S+\s+)/;
-    
-    return function (text) {
-        var chunks = text.toString()
-            .split(re)
-            .reduce(function (acc, x) {
-                if (mode === 'hard') {
-                    for (var i = 0; i < x.length; i += stop - start) {
-                        acc.push(x.slice(i, i + stop - start));
-                    }
-                }
-                else acc.push(x)
-                return acc;
-            }, [])
-        ;
-        
-        return chunks.reduce(function (lines, rawChunk) {
-            if (rawChunk === '') return lines;
-            
-            var chunk = rawChunk.replace(/\t/g, '    ');
-            
-            var i = lines.length - 1;
-            if (lines[i].length + chunk.length > stop) {
-                lines[i] = lines[i].replace(/\s+$/, '');
-                
-                chunk.split(/\n/).forEach(function (c) {
-                    lines.push(
-                        new Array(start + 1).join(' ')
-                        + c.replace(/^\s+/, '')
-                    );
-                });
-            }
-            else if (chunk.match(/\n/)) {
-                var xs = chunk.split(/\n/);
-                lines[i] += xs.shift();
-                xs.forEach(function (c) {
-                    lines.push(
-                        new Array(start + 1).join(' ')
-                        + c.replace(/^\s+/, '')
-                    );
-                });
-            }
-            else {
-                lines[i] += chunk;
-            }
-            
-            return lines;
-        }, [ new Array(start + 1).join(' ') ]).join('\n');
-    };
-};
-
-wordwrap.soft = wordwrap;
-
-wordwrap.hard = function (start, stop) {
-    return wordwrap(start, stop, { mode : 'hard' });
-};
-});
-
 require.define("/node_modules/mux-demux/node_modules/xtend/package.json",function(require,module,exports,__dirname,__filename,process){module.exports = {"main":"index"}});
 
 require.define("/node_modules/mux-demux/node_modules/xtend/index.js",function(require,module,exports,__dirname,__filename,process){module.exports = extend
@@ -8274,6 +7730,65 @@ module.exports = function (endpoints) {
 }
 
 });
+
+require.define("/example/complex/node_modules/domready/package.json",function(require,module,exports,__dirname,__filename,process){module.exports = {"main":"./ready.js"}});
+
+require.define("/example/complex/node_modules/domready/ready.js",function(require,module,exports,__dirname,__filename,process){/*!
+  * domready (c) Dustin Diaz 2012 - License MIT
+  */
+!function (name, definition) {
+  if (typeof module != 'undefined') module.exports = definition()
+  else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
+  else this[name] = definition()
+}('domready', function (ready) {
+
+  var fns = [], fn, f = false
+    , doc = document
+    , testEl = doc.documentElement
+    , hack = testEl.doScroll
+    , domContentLoaded = 'DOMContentLoaded'
+    , addEventListener = 'addEventListener'
+    , onreadystatechange = 'onreadystatechange'
+    , readyState = 'readyState'
+    , loaded = /^loade|c/.test(doc[readyState])
+
+  function flush(f) {
+    loaded = 1
+    while (f = fns.shift()) f()
+  }
+
+  doc[addEventListener] && doc[addEventListener](domContentLoaded, fn = function () {
+    doc.removeEventListener(domContentLoaded, fn, f)
+    flush()
+  }, f)
+
+
+  hack && doc.attachEvent(onreadystatechange, fn = function () {
+    if (/^c/.test(doc[readyState])) {
+      doc.detachEvent(onreadystatechange, fn)
+      flush()
+    }
+  })
+
+  return (ready = hack ?
+    function (fn) {
+      self != top ?
+        loaded ? fn() : fns.push(fn) :
+        function () {
+          try {
+            testEl.doScroll('left')
+          } catch (e) {
+            return setTimeout(function() { ready(fn) }, 50)
+          }
+          fn()
+        }()
+    } :
+    function (fn) {
+      loaded ? fn() : fns.push(fn)
+    })
+})});
+
+require.define("/example/complex/package.json",function(require,module,exports,__dirname,__filename,process){module.exports = {}});
 
 require.define("/example/complex/chat.js",function(require,module,exports,__dirname,__filename,process){var crdt = require('crdt')
 
@@ -8546,13 +8061,14 @@ require.define("/example/complex/client.js",function(require,module,exports,__di
 var reconnect  = require('reconnect/shoe')
 var MuxDemux   = require('mux-demux')
 var kv         = require('kv')('crdt_example')
+var domready   = require('domready')
 
 var createChat = require('./chat')
 var createMice = require('./mouses')
 var createSets = require('./sets')
 
 //some data to replicate!
-var docs = {
+var docs = window.DOCS = {
   todo: new crdt.Doc(),
   chat: new crdt.Doc(),
   mice: new crdt.Doc()
@@ -8576,7 +8092,8 @@ function sync(doc, name) {
 
 sync(docs.todo, 'TODO2-')
 
-$(function () {
+domready(function () {
+
   reconnect(function (stream) {
     var mx = MuxDemux()
     //connect remote to mux-demux

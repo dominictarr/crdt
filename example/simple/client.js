@@ -3,6 +3,7 @@ var reconnect  = require('reconnect/shoe')
 var $=window.$ = require('jquery-browserify')
 var heartbeat  = require('./heartbeat')
 var es         = require('event-stream')
+var debug      = require('../../debug')
 
 var doc = window.DOC = new crdt.Doc()
 
@@ -20,12 +21,14 @@ function render(row) {
 $(function () {
 
   //when a new row is created...
-  doc.on('add', function (row) {
+/*  doc.on('add', function (row) {
     $('body').append(render(row))
   }).on('row_update', function (row) {
     $('#'+row.id).html(render(row))
   })
+*/
 
+  debug(document.body, doc)
   var me = heartbeat(doc)
 
   //connect, and then reconnect after wifi goes down.

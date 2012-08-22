@@ -7,7 +7,11 @@ module.exports = function (doc, id) {
   var me = doc.set(id, {create: new Date().toUTCString()})
   //update a heartbeat every so often.
   setInterval(function () {
-    me.set('heartbeat', ''+Date.now())
+    me.set({
+      heartbeat: ''+Date.now(),
+      random: Math.round(Math.random()*10)
+    })
+
   }, 1e3)
 
   return me

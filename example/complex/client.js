@@ -2,13 +2,14 @@ var crdt       = require('crdt')
 var reconnect  = require('reconnect/shoe')
 var MuxDemux   = require('mux-demux')
 var kv         = require('kv')('crdt_example')
+var domready   = require('domready')
 
 var createChat = require('./chat')
 var createMice = require('./mouses')
 var createSets = require('./sets')
 
 //some data to replicate!
-var docs = {
+var docs = window.DOCS = {
   todo: new crdt.Doc(),
   chat: new crdt.Doc(),
   mice: new crdt.Doc()
@@ -32,7 +33,8 @@ function sync(doc, name) {
 
 sync(docs.todo, 'TODO2-')
 
-$(function () {
+domready(function () {
+
   reconnect(function (stream) {
     var mx = MuxDemux()
     //connect remote to mux-demux
