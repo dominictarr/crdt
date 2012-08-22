@@ -14,7 +14,8 @@
     "node": "*"
   },
   "dependencies": {
-    "between": "0.0.0"
+    "between": "0.0.0",
+    "stream-serializer": "0.0.0"
   },
   "devDependencies": {
     "it-is": "~1.0.1",

@@ -1,6 +1,7 @@
 'use strict';
 var Stream       = require('stream')
 var u            = require('./utils')
+var serializer   = require('stream-serializer')
 
 exports.createStream = createStream
 exports.createReadStream = createReadStream
@@ -121,7 +122,9 @@ function createStream (doc, opts) {
     doc.removeListener('sync', onSync)
     s.emit('close')
   }
-  return s
+
+
+  return serializer(opts.wrapper || 'raw')(s)
 }
 
 function createReadStream(doc, opts) {
