@@ -124,7 +124,7 @@ function createStream (doc, opts) {
   }
 
 
-  return serializer(opts.wrapper || 'raw')(s)
+  return serializer(opts.wrapper)(s)
 }
 
 function createReadStream(doc, opts) {
