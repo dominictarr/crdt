@@ -1,4 +1,4 @@
-
+'use strict';
 
 var next = process.nextTick
 
@@ -10,8 +10,8 @@ exports.test = function (t) {
   var doc = new crdt.Doc()
   var hoc = new crdt.Doc()
   doc.sync = hoc.sync = true
-  var ds = crdt.createStream(doc)
-  var hs = crdt.createStream(hoc)
+  var ds = doc.createStream({wrapper: 'json'}) //crdt.createStream(doc)
+  var hs = hoc.createStream({wrapper: 'json'}) //crdt.createStream(hoc)
 
   ds.pipe(hs).pipe(ds)
 
@@ -68,7 +68,7 @@ exports.listen = function (t) {
     t.end()
   })
 
-  crdt.createStream(hoc).pipe(crdt.createStream(doc))
+  hoc.createStream({wrapper: 'json'}).pipe(doc.createStream({wrapper: 'json'}))
   hoc.add({id: 'thing', random: random }) 
 }
 
@@ -85,8 +85,8 @@ exports.single = function (t) {
 
 
   //this should replicate only one document.
-  hoc.createStream({id: 'thing'})
-    .pipe(doc.createStream({id: 'thing'}))
+  hoc.createStream({id: 'thing', wrapper: 'raw'})
+    .pipe(doc.createStream({id: 'thing', wrapper: 'raw'}))
 
   var thing = hoc.get('thing')
 

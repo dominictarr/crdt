@@ -22,8 +22,8 @@ test('random', function (t) {
   var a = new crdt.Doc()
   var b = new crdt.Doc()
   a.sync = b.sync = true
-  var as = crdt.createStream(a)
-  var bs = crdt.createStream(b)
+  var as = crdt.createStream(a, {wrapper: 'raw'})
+  var bs = crdt.createStream(b, {wrapper: 'raw'})
 
   bs.pipe(as)
 
@@ -88,8 +88,8 @@ test ('histroy', function (t) {
   var a = new crdt.Doc()
   var b = new crdt.Doc()
   a.sync = b.sync = true
-  var as = crdt.createStream(a)
-  var bs = crdt.createStream(b)
+  var as = crdt.createStream(a, {wrapper: 'raw'})
+  var bs = crdt.createStream(b, {wrapper: 'raw'})
 
   //XXX difference between 'histroy' and 'random' is 
   //    the order of .pipe(..) or randomUpdates()
@@ -120,8 +120,8 @@ test ('histroy2', function (t) {
   var a = new crdt.Doc()
   var b = new crdt.Doc()
   a.sync = b.sync = true
-  var as = crdt.createStream(a, 'a')
-  var bs = crdt.createStream(b, 'b')
+  var as = crdt.createStream(a, {wrapper: 'raw'})
+  var bs = crdt.createStream(b, {wrapper: 'raw'})
 
   //XXX difference between 'histroy' and 'random' is 
   //    the order of .pipe(..) or randomUpdates()
@@ -156,10 +156,10 @@ test ('histroy3', function (t) {
   var b = new crdt.Doc()  
   var c = new crdt.Doc()
   a.sync = b.sync = c.sync = true
-  var as = crdt.createStream(a, 'a')
-  var bs = crdt.createStream(b, 'b')
-  var bs2 = crdt.createStream(b, 'b2')
-  var cs = crdt.createStream(c, 'c')
+  var as = crdt.createStream(a, {wrapper: 'raw'})
+  var bs = crdt.createStream(b, {wrapper: 'raw'})
+  var bs2 = crdt.createStream(b, {wrapper: 'raw'})
+  var cs = crdt.createStream(c, {wrapper: 'raw'})
 
   //XXX difference between 'histroy' and 'random' is 
   //    the order of .pipe(..) or randomUpdates()
@@ -205,10 +205,10 @@ test ('client-server', function (t) {
   var c = new crdt.Doc()
   a.sync = b.sync = c.sync = true
 
-  var as = crdt.createStream(a, 'a')
-  var bs = crdt.createStream(b, 'b')
-  var bs2 = crdt.createStream(b, 'b2')
-  var cs = crdt.createStream(c, 'c')
+  var as = crdt.createStream(a, {wrapper: 'raw'})
+  var bs = crdt.createStream(b, {wrapper: 'raw'})
+  var bs2 = crdt.createStream(b, {wrapper: 'raw'})
+  var cs = crdt.createStream(c, {wrapper: 'raw'})
 
   //B is the Server, A and C are clients.
   //will apply updates to A, expect them to eventually propagate to C
