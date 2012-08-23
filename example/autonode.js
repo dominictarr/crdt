@@ -17,10 +17,10 @@ var m = new crdt.Doc()
 
 autonode(function (stream) {
   stream
-    .pipe(es.split())
-    .pipe(es.parse())
+//    .pipe(es.split())
+  //  .pipe(es.parse())
     .pipe(m.createStream())
-    .pipe(es.stringify())
+    //.pipe(es.stringify())
     .pipe(stream)
 }).listen(4242)
 
