@@ -26,7 +26,7 @@ shoe(function (sock) {
     if(!s.meta || !docs[s.meta.type])
       s.error('Unknown Doc' + JSON.stringify(s.meta))
     else
-      s.pipe(docs[s.meta.type].createStream()).pipe(s)
+      s.pipe(docs[s.meta.type].createStream({wrapper: 'raw'})).pipe(s)
   })).pipe(sock)
 }).install(app.listen(3000), '/shoe')
 
