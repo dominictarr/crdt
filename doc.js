@@ -156,6 +156,8 @@ Doc.prototype.update = function (update, source) {
 
   row.emit('update', update, changed)
   row.emit('changes', changes, changed)
+  row.emit('change', changed) //installing this in paralel, so tests still pass.
+  //will depreciate the old way later.
   this.emit('update', update, source)   //rename this event to 'data' or 'diff'?
   this.emit('row_update', row)          //rename this event to 'update'
 }

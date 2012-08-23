@@ -111,7 +111,7 @@ an object with in a crdt `Doc`
 set `key` to `value`. if `Row#set(obj)` is called instead
 all the keys in obj will update atomically.
 
-This causes a 'changes' event to be emitted, and an update message 
+This causes a 'change' event to be emitted, and an update message 
 to be sent down the stream. (note, if the stream in not yet connected, 
 that is okay, current state of the document is replicated as soon as the
 streams are connected.)
@@ -126,10 +126,12 @@ return a raw object ready for serialization.
 this is not a JSON string yet, misleading name,
 but that is the correct JSON.stringify api.
 
-### event: Row.emit('changes', changes)
+### event: Row.emit('change', changed)
 
 Emitted when a row is changed. this may be the result of a local or a 
 remote update.
+
+changed is the a hash of the fields that have changed.
 
 ## Set
 
