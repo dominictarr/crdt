@@ -17,10 +17,7 @@ doc.on('row_update', function (row) {
 var shoe = createShoe(function (sock) {
     //connect to the crdt stream
     sock
-      .pipe(es.split())
-      .pipe(es.parse())
       .pipe(doc.createStream())
-      .pipe(es.stringify())
       .pipe(sock)
 })
 

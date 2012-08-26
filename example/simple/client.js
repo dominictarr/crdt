@@ -36,10 +36,7 @@ $(function () {
 
     //connect to the crdt stream
     shoe
-      .pipe(es.split())
-      .pipe(es.parse())
       .pipe(doc.createStream())
-      .pipe(es.stringify())
       .pipe(shoe)
 
   }).connect('/simple')
