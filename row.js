@@ -12,6 +12,7 @@ inherits(Row, EventEmitter)
 function Row (id) {
   this.id = id
   this.state = {id: id}
+  this.setMaxListeners(Infinity)
 }
 
 Row.prototype.set = function (changes, v) {

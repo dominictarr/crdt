@@ -1,4 +1,5 @@
 'use strict';
+
 var Set      = require('./set')
 var Row      = require('./row')
 var inherits = require('util').inherits
@@ -46,7 +47,6 @@ function Seq (doc, key, val) {
 
     before = toKey(this.get(before) || '!')
     after  = toKey(this.get(after)  || '~')
-
 
     //must get id from the doc,
     //because may be moving this item into this set.

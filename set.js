@@ -84,6 +84,9 @@ function Set(doc, key, value) {
     var row = doc.get(id)
     if(row.get(key) === value) add(row) 
   }
+
+  this.setMaxListeners(Infinity)
+
 }
 
 Set.prototype.asArray = function () {
