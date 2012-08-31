@@ -1,12 +1,12 @@
 var inherits     = require('util').inherits
-var EventEmitter = require('events').EventEmitter
 var Row          = require('./row')
-var stream       = require('./stream')
 var u            = require('./utils')
 var Set          = require('./set')
 var Seq          = require('./seq')
+var Scuttlebutt  = require('scuttlebutt')
+var EventEmitter = require('events').EventEmitter
 
-inherits(Doc, EventEmitter)
+inherits(Doc, Scuttlebutt)
 
 module.exports = Doc
 //doc
@@ -47,13 +47,15 @@ function Doc (id) {
   //the id of the doc refers to the instance.
   //that is, to the node.
   //it's used to identify a node 
-  this.id = id || '#' + Math.round(Math.random()*1000)
+//  this.id = id || '#' + Math.round(Math.random()*1000)
   this.rows = {}
   this.hist = {}
   this.recieved = {}
   this.sets = new EventEmitter() //for tracking membership of sets.
   this.setMaxListeners(Infinity)
   this.sets.setMaxListeners(Infinity)
+  Scuttlebutt.call(this, id)
+
 }
 
 Doc.prototype.add = function (initial) {
@@ -76,8 +78,8 @@ Doc.prototype._add = function (id, source) {
   this.rows[r.id] = r
 
   function track (changes, source) {
-    var update = [r.id, changes, u.timestamp(), doc.id]
-    doc.update(update, source)
+//    var update = [r.id, changes, u.timestamp(), doc.id]
+    doc.localUpdate(r.id, changes)
   }
 
   r.on('preupdate', track)
@@ -109,12 +111,11 @@ Doc.prototype.set = function (id, change) {
   if so, replace that keys hist.
 */
 
-Doc.prototype.update = function (update, source) {
+Doc.prototype.applyUpdate = function (update, source) {
 
   //apply an update to a row.
   //take into account histroy.
   //and insert the change into the correct place.
- 
   var id      = update[0]
   var changes = update[1]
   var timestamp = update[2]
@@ -128,10 +129,11 @@ Doc.prototype.update = function (update, source) {
 
 
   //remember the most recent update from each node.
-  if(!this.recieved[from] || this.recieved[from] < timestamp)
-    this.recieved[from] = timestamp
+  //now handled my scuttlebutt.
+//  if(!this.recieved[from] || this.recieved[from] < timestamp)
+//    this.recieved[from] = timestamp
 
-  if(!row.validate(changes)) return
+//  if(!row.validate(changes)) return
   
   for(var key in changes) {
     var value = changes[key]
@@ -142,20 +144,19 @@ Doc.prototype.update = function (update, source) {
     }
   }
 
-/*
-  probably, there may be mulitple sets that listen to the same key, 
-  but activate on different values...
-
-  hang on, in the mean time, I will probably only be managing n < 10 sets. 
-  at once, 
-*/
+//  probably, there may be mulitple sets that listen to the same key, 
+//  but activate on different values...
+//
+//  hang on, in the mean time, I will probably only be managing n < 10 sets. 
+//  at once, 
 
   u.merge(row.state, changed)
   for(var k in changed)
     this.sets.emit(k, row, changed) 
   
   if(!emit) return
-
+  
+  this.emit('_update', update)
   row.emit('update', update, changed)
   row.emit('changes', changes, changed)
   row.emit('change', changed) //installing this in paralel, so tests still pass.
@@ -164,20 +165,14 @@ Doc.prototype.update = function (update, source) {
   this.emit('row_update', row)          //rename this event to 'update'
 }
 
-Doc.prototype.history = function (id) {
-  if(!id) {
-    var h = []
-    for (var id in this.hist) {
-      u.concat(h, this.history(id))
-    }
-    return h.sort(order)
-  }
-
+Doc.prototype.history = function (sources) {
   var h = []
-  var hist = this.hist[id]
-  for (var k in hist) {
-    if(!~h.indexOf(hist[k]))
-      h.push(hist[k])
+  for (var id in this.hist) {
+    var hist = this.hist[id]
+    for (var k in hist) {
+      if(!~h.indexOf(hist[k]) && Scuttlebutt.filter(hist[k], sources))
+        h.push(hist[k])
+    }
   }
   return h.sort(order)
 }
@@ -208,14 +203,3 @@ Doc.prototype.get = function (id) {
   return this.rows[id] = this.rows[id] || this._add(new Row(id), 'local')
 }
 
-Doc.prototype.createStream = function (opts) {
-  return stream.createStream(this, opts)
-}
-
-Doc.prototype.createWriteStream = function (opts) {
-  return stream.createWriteStream(this, opts)
-}
-
-Doc.prototype.createReadStream = function (opts) {
-  return stream.createReadStream(this, opts)
-}

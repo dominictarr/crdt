@@ -96,18 +96,13 @@ test ('histroy', function (t) {
 
   randomUpdates(b)
 
+  bs.pipe(as).pipe(bs)
+  
   next(function () {
-
-    bs.pipe(as)
-    
-    next(function () {
-      //what if there where random updates, then was flushed
-      //then more changes then flush..
-
-      assert.deepEqual(b.toJSON(), a.toJSON())
-
-      t.end()
-    })
+    //what if there where random updates, then was flushed
+    //then more changes then flush..
+    assert.deepEqual(b.toJSON(), a.toJSON())
+    t.end()
   })
 })
 
@@ -127,23 +122,17 @@ test ('histroy2', function (t) {
   //    the order of .pipe(..) or randomUpdates()
 
   randomUpdates(b)
-
-  bs.flush() //act like the updates where made ages ago.
-             //already sent, acient histroy.
-             //however, they may still affect current state.
-
-  randomUpdates(b)
   //not flushed yet
-  bs.pipe(validateUpdates(assert)).pipe(as)
+  bs.pipe(validateUpdates(assert)).pipe(as).pipe(bs)
   
-  bs.flush() //this would be called in next tick
+  next(function () {
 
-  //what if there where random updates, then was flushed
-  //then more changes then flush..
+    //what if there where random updates, then was flushed
+    //then more changes then flush..
 
-  assert.deepEqual(b.toJSON(), a.toJSON())
-
-  t.end()
+    assert.deepEqual(b.toJSON(), a.toJSON())
+    t.end()
+  })
 })
 
 
@@ -164,40 +153,41 @@ test ('histroy3', function (t) {
   //XXX difference between 'histroy' and 'random' is 
   //    the order of .pipe(..) or randomUpdates()
 
-  bs2.pipe(cs)
+  bs2.pipe(cs).pipe(bs2)
 
   randomUpdates(b)
-  bs2.flush() 
   console.log('flushed!')
 
   randomUpdates(b)
   //not flushed yet
-  bs.pipe(as)
+  bs.pipe(as).pipe(bs)
  
-  bs.flush() //this would be called in next tick
-  bs2.flush()
-  console.log('flushed!')
-  // THIS IS A PROBLEM.
-  // since updates are cleared when flush it called
-  // it won't work if they are written by more than one stream!
-  // need to send updates to both streams.
-  // so... emit them rather than return them...
+  next(function () {
+    console.log('flushed!')
+    // THIS IS A PROBLEM.
+    // since updates are cleared when flush it called
+    // it won't work if they are written by more than one stream!
+    // need to send updates to both streams.
+    // so... emit them rather than return them...
 
-  // IDEA. maybe emit changes when they first occur
-  // then continue to change them until it's flushed.
-  // (which clears the changes)
+    // IDEA. maybe emit changes when they first occur
+    // then continue to change them until it's flushed.
+    // (which clears the changes)
 
-  // AHA! the CRDT decides when to flush changes.
-  // not the stream.
+    // AHA! the CRDT decides when to flush changes.
+    // not the stream.
 
-  // the crdt will emit 'flush'.
+    // the crdt will emit 'flush'.
 
-  assert.deepEqual(b.toJSON(), a.toJSON())
+    assert.deepEqual(b.toJSON(), a.toJSON())
 
-  assert.deepEqual(b.toJSON(), c.toJSON())
+    assert.deepEqual(b.toJSON(), c.toJSON())
 
-  t.end()
+    t.end()
+
+  })
 })
+
 
 test ('client-server', function (t) {
   var a = new crdt.Doc()
@@ -213,54 +203,32 @@ test ('client-server', function (t) {
   //B is the Server, A and C are clients.
   //will apply updates to A, expect them to eventually propagate to C
 
-  cs.pipe(bs2).pipe(validateUpdates(assert)).pipe(cs)
+  cs.pipe(bs2).pipe(validateUpdates(t)).pipe(cs)
 
-  as.pipe(bs).pipe(validateUpdates(assert)).pipe(as)
+  as.pipe(bs).pipe(validateUpdates(t)).pipe(as)
 
   randomUpdates(a)
-  as.flush() 
-  bs.flush()
-  bs2.flush()
-  console.log('flushed!')
 
-  assert.deepEqual(b.toJSON(), a.toJSON())
-  assert.deepEqual(b.toJSON(), c.toJSON())
+  next(function () {
+    console.log('flushed!')
 
-  randomUpdates(c)
+    assert.deepEqual(b.toJSON(), a.toJSON())
+    assert.deepEqual(b.toJSON(), c.toJSON())
 
-  cs.flush() 
-  bs2.flush() 
-  bs.flush()
+    randomUpdates(c)
 
-  console.log(cs.queue, bs2.queue, bs.queue, as.queue)
-
-  assert.deepEqual(b.toJSON(), c.toJSON())
-//  assert.deepEqual(b.toJSON(), a.toJSON())
-
-//  randomUpdates(b)
+    next(function () {
   
-  //not flushed yet
- 
-  //bs.flush() //this would be called in next tick
-  //bs2.flush()
-  //console.log('flushed!')
-  // THIS IS A PROBLEM.
-  // since updates are cleared when flush it called
-  // it won't work if they are written by more than one stream!
-  // need to send updates to both streams.
-  // so... emit them rather than return them...
+      console.log(cs.queue, bs2.queue, bs.queue, as.queue)
 
-  // IDEA. maybe emit changes when they first occur
-  // then continue to change them until it's flushed.
-  // (which clears the changes)
+      assert.deepEqual(b.toJSON(), c.toJSON())
 
-  // AHA! the CRDT decides when to flush changes.
-  // not the stream.
+      // the crdt will emit 'flush'.
 
-  // the crdt will emit 'flush'.
+      assert.deepEqual(b.toJSON(), a.toJSON())
+      assert.deepEqual(b.toJSON(), c.toJSON())
 
-  assert.deepEqual(b.toJSON(), a.toJSON())
-  assert.deepEqual(b.toJSON(), c.toJSON())
-
-  t.end()
+    t.end()
+    })
+  })
 })

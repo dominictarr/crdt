@@ -2,8 +2,11 @@
 var es      = require('event-stream')
 var assert  = require('assertions')
 
+'use strict';
+
 exports.validateUpdates = function (t) {
 //  var t = assert
+  t = t || assert
   return es.mapSync(function (update) {
     if(Array.isArray(update)) {
       assert.equal(update.length, 4, 'length of update')
@@ -11,10 +14,7 @@ exports.validateUpdates = function (t) {
       t.equal(typeof update[1], 'object')
       t.equal(typeof update[2], 'number')
       t.equal(typeof update[3], 'string')
-    } else {
-      t.equal(typeof update.iam, 'string')
-      t.equal(typeof update.iknow, 'object')
-    }
+    } 
     return update
   })
 }

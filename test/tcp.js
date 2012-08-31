@@ -14,9 +14,9 @@ var assert = require('assert')
 */
 
 var a = new crdt.Doc()
-var as = crdt.createStream(a)
+var as = a.createStream()
 var b = new crdt.Doc()
-var bs = crdt.createStream(b)
+var bs = b.createStream()
 
 a.sync = b.sync = true
 

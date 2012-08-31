@@ -10,11 +10,12 @@ exports.test = function (t) {
   var doc = new crdt.Doc()
   var hoc = new crdt.Doc()
   doc.sync = hoc.sync = true
-  var ds = doc.createStream({wrapper: 'json'}) //crdt.createStream(doc)
-  var hs = hoc.createStream({wrapper: 'json'}) //crdt.createStream(hoc)
+  var ds = doc.createStream({wrapper: 'raw'}) //crdt.createStream(doc)
+  var hs = hoc.createStream({wrapper: 'raw'}) //crdt.createStream(hoc)
 
   ds.pipe(hs).pipe(ds)
-
+  ds.resume()
+  hs.resume()
   doc.add({id: 'abc', hello: 3})
 
   next(function () {
@@ -36,8 +37,8 @@ exports.test = function (t) {
 
         var moc = new crdt.Doc()
 
-        var hs2 = crdt.createStream(hoc)
-        var ms = crdt.createStream(moc)
+        var hs2 = hoc.createStream()
+        var ms = moc.createStream()
 
         console.log('DHIST', doc.history())
         console.log('HHIST', hoc.history())
@@ -104,8 +105,8 @@ exports.single = function (t) {
   next(function () {
 
     var hThing = hoc.get('thing')
-  assertNormal(doc, 'doc')
-  assertNormal(doc, 'hoc')
+    assertNormal(doc, 'doc')
+    assertNormal(doc, 'hoc')
 
 
     a.deepEqual(hThing.toJSON(), thing.toJSON())
@@ -118,9 +119,9 @@ exports.single = function (t) {
 
     console.log(hThing2)
 
-    a.throws(function () {
-      a.deepEqual(hThing2.toJSON(), thing2.toJSON())
-    })
+//    a.throws(function () {
+//      a.deepEqual(hThing2.toJSON(), thing2.toJSON())
+//    })
 
     
     t.end()
