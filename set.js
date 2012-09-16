@@ -55,12 +55,14 @@ function Set(doc, key, value) {
     set.emit('add', row)
 
     function remove (_, changed) {
-      if(row.state[key] === value)
-        return set.emit('changes', row, changed)
+      if(row.state[key] === value) {
+        set.emit('changes', row, changed)
+        return
+      }
       delete rows[row.id]
       var i = array.indexOf(row)
       if(~i) array.splice(i, 1)
-      else return 
+      set.emit('changes', row, changed)
       set.emit('remove', row)
       row.removeListener('changes', remove)
     }
@@ -113,6 +115,10 @@ Set.prototype.get = function (id) {
       'string' === typeof id ? this.rows[id] 
     : 'number' === typeof id ? this.rows[id] 
     : id && id.id            ? this.rows[id.id]
-    :                          id
+    :                          null
   )
+}
+
+Set.prototype.has = function (row) {
+  return this.get(row)
 }
