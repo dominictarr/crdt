@@ -192,20 +192,19 @@ push a `Row` onto the end of the `Seq`
 
 get the number of items currently in the `Seq`.
 
-
 ### Seq#pop()
 
 remove the last item.
 
-### Seq#unshift()
+### Seq#shift()
 
 remove the first item.
 
-### Seq#before(id | row)
+### Seq#before(item, id | row)
 
-get item before the given row/id.
+insert `item` before the given `row/id`.
 
-### Seq#after(id | row)
+### Seq#after(item, id | row)
 
-get item after the given row/id.
+insert `item` after the given `row/id`.
 
