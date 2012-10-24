@@ -145,6 +145,10 @@ get the contents of this set as a regular js `Array`
 
 calls `toJSON` on the each `Row` in the set and puts it in an array.
 
+### Set#has(row|id)
+
+check if a row|id is a member of the set.
+
 ### Set#get(id)
 
 get an item in this set, if it exists.
@@ -171,6 +175,10 @@ get the first item in the seq.
 ### Seq#last()
 
 get the last item in the seq.
+
+### Set#has(row|id)
+
+check if a row|id is a member of the seq. (inherited from `Set`)
 
 ### Seq#indexOf(id | row)
 
