@@ -68,8 +68,10 @@ exports.listen = function (t) {
     a.equal(thing.get('random'), random)
     t.end()
   })
-
-  hoc.createStream({wrapper: 'json'}).pipe(doc.createStream({wrapper: 'json'}))
+  var hs
+  (hs = hoc.createStream({wrapper: 'json'}))
+    .pipe(doc.createStream({wrapper: 'json'}))
+    .pipe(hs)
   hoc.add({id: 'thing', random: random }) 
 }
 
@@ -86,8 +88,10 @@ exports.single = function (t) {
 
 
   //this should replicate only one document.
-  hoc.createStream({id: 'thing', wrapper: 'raw'})
+  var hs 
+  (hs = hoc.createStream({id: 'thing', wrapper: 'raw'}))
     .pipe(doc.createStream({id: 'thing', wrapper: 'raw'}))
+    .pipe(hs)
 
   var thing = hoc.get('thing')
 

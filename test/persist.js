@@ -7,10 +7,6 @@ var randomUpdates   = help.randomUpdates
 var clone           = help.clone
 var validateUpdates = help.validateUpdates
 
-/*function test (name, test) {
-  exports[name] = test
-}*/
-
 var next = process.nextTick
 
 function test(n,t) {
@@ -22,8 +18,9 @@ test('simple', function (t) {
   var a = new crdt.Doc()
 
   randomUpdates(a)
-console.log('simple')
-  a.createReadStream({wrapper: 'raw'})
+  console.log('simple')
+
+  a.createReadStream({wrapper: 'raw', tail: false})
     .pipe(es.writeArray(function (err, array) {
       console.log('array', array)
       array.forEach(function(v, i) {
@@ -55,14 +52,13 @@ console.log('simple')
     }))
 })
 
-
 test('JSON', function (t) {
 
   var a = new crdt.Doc()
 
   randomUpdates(a)
-console.log('simple')
-  a.createReadStream({wrapper: 'json'})
+
+  a.createReadStream({wrapper: 'json', tail: false})
     .pipe(es.writeArray(function (err, array) {
       console.log('array', array)
       array.forEach(function(v, i) {

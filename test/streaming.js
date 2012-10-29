@@ -25,7 +25,7 @@ test('random', function (t) {
   var as = crdt.createStream(a, {wrapper: 'raw'})
   var bs = crdt.createStream(b, {wrapper: 'raw'})
 
-  bs.pipe(as)
+  bs.pipe(as).pipe(bs)
 
   randomUpdates(b)
 

@@ -14,9 +14,7 @@ var assert = require('assert')
 */
 
 var a = new crdt.Doc()
-var as = a.createStream()
 var b = new crdt.Doc()
-var bs = b.createStream()
 
 a.sync = b.sync = true
 
@@ -53,6 +51,7 @@ var allChanges = 10
 exports.test = function (t) {
 
 var server = net.createServer(function (sock) {
+  var as = a.createStream()
   toJSON(as, 'A>').pipe(sock).pipe(fromJSON(as, 'A<'))
 
 // **************************************************
@@ -78,6 +77,7 @@ var server = net.createServer(function (sock) {
   //  a.pipe(b).pipe(a)
 }).listen(6464, function () {
    var client
+var bs = b.createStream()
 toJSON(bs, 'B>').pipe(client = net.connect(6464)).pipe(fromJSON(bs, 'B<'))
 
   b.on('update', eventually(function () {

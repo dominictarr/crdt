@@ -10,15 +10,14 @@ var doc = new crdt.Doc()
 var hoc = new crdt.Doc()
 doc.sync = hoc.sync = true
 
-var ds = crdt.createStream(doc)
-var hs = crdt.createStream(hoc)
-
 var piped = false
 var consistent = false
 
 setTimeout(function () {
   piped = true
   console.log('pipe')
+  var ds = crdt.createStream(doc)
+  var hs = crdt.createStream(hoc)
   ds.pipe(hs).pipe(ds)
 }, Math.random()*10)
 
