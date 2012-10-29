@@ -82,6 +82,7 @@ toJSON(bs, 'B>').pipe(client = net.connect(6464)).pipe(fromJSON(bs, 'B<'))
 
   b.on('update', eventually(function () {
     try { 
+      console.log('updated', a.toJSON(), b.toJSON())
       assert.deepEqual(a.toJSON(), b.toJSON())
       return allChanges <= 0
     } catch (e) {
