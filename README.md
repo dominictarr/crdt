@@ -7,6 +7,10 @@ CRDTs give you eventual consistency for free. it is not necessary to track concu
 and use complicated merge algorithms. this module is useful for collaborative/distributed/peer2peer (same things)
 applications.
 
+Further Reading: [A comprehensive study of
+Convergent and Commutative Replicated Data Types
+](http://hal.upmc.fr/docs/00/55/55/88/PDF/techreport.pdf)
+
 
 ## replicating documents
 
