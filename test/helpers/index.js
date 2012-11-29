@@ -9,11 +9,10 @@ exports.validateUpdates = function (t) {
   t = t || assert
   return es.mapSync(function (update) {
     if(Array.isArray(update)) {
-      assert.equal(update.length, 4, 'length of update')
-      t.equal(typeof update[0], 'string')
-      t.equal(typeof update[1], 'object')
-      t.equal(typeof update[2], 'number')
-      t.equal(typeof update[3], 'string')
+//      assert.equal(update.length, 3, 'length of update')
+      t.equal(typeof update[0], 'object')
+      t.equal(typeof update[1], 'number')
+      t.equal(typeof update[2], 'string')
     } 
     return update
   })

@@ -26,8 +26,6 @@ test('simple', function (t) {
       array.forEach(function(v, i) {
         if(!i)
           assert.equal(v, a.id)
-        else
-          assert.equal(v.length, 4)
       })
       var sync = false
       var b = new crdt.Doc()
@@ -66,8 +64,6 @@ test('JSON', function (t) {
         v = JSON.parse(v)
         if(!i)
           assert.equal(v, a.id)
-        else
-          assert.equal(v.length, 4)
       })
       var sync = false
       var b = new crdt.Doc()
