@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "between": "0.0.0",
-    "scuttlebutt": "~4.1"
+    "scuttlebutt": "~5.0"
   },
   "devDependencies": {
     "it-is": "~1.0.1",
