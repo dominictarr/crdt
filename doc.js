@@ -40,7 +40,7 @@ module.exports = Doc
 */
 
 function order (a, b) {
-  return u.strord(a[2], b[2]) || u.strord(a[3], b[3])
+  return u.strord(a[1], b[1]) || u.strord(a[2], b[2])
 }
 
 function Doc (id) {
@@ -67,7 +67,7 @@ Doc.prototype.add = function (initial) {
   return r
 }
 
-Doc.prototype._add = function (id, source) {
+Doc.prototype._add = function (id, source, change) {
 
   var doc = this
 
@@ -79,24 +79,23 @@ Doc.prototype._add = function (id, source) {
 
   function track (changes, source) {
 //    var update = [r.id, changes, u.timestamp(), doc.id]
-    doc.localUpdate(r.id, changes)
+    doc.localUpdate([r.id, changes])
   }
 
   r.on('preupdate', track)
 
-  this.emit('add', r)
-  this.emit('create', r) //alias
+  r._new = true
   return r
 }
 
 Doc.prototype.timeUpdated = function (row, key) {
   var h = this.hist[row.id] 
   if(!h) return
-  return h[key][3]
+  return h[key][2]
 }
 
 Doc.prototype.set = function (id, change) {
-  var r = this._add(id, 'local')
+  var r = this._add(id, 'local', change)
   return r.set(change)
 }
 
@@ -116,10 +115,10 @@ Doc.prototype.applyUpdate = function (update, source) {
   //apply an update to a row.
   //take into account histroy.
   //and insert the change into the correct place.
-  var id      = update[0]
-  var changes = update[1]
-  var timestamp = update[2]
-  var from    = update[3]
+  var id      = update[0][0]
+  var changes = update[0][1]
+  var timestamp = update[1]
+  var from    = update[2]
 
   var changed = {}
 
@@ -156,6 +155,11 @@ Doc.prototype.applyUpdate = function (update, source) {
   
   if(!emit) return
   
+  if(row._new) {
+    this.emit('add', row)
+    this.emit('create', row) //alias
+    row._new = false
+  }
   this.emit('_update', update)
   row.emit('update', update, changed)
   row.emit('changes', changes, changed)
