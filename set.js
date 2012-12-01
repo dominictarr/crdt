@@ -1,8 +1,8 @@
 'use strict';
 var inherits     = require('util').inherits
 var EventEmitter = require('events').EventEmitter
-var u            = require('./utils')
 var Row          = require('./row')
+var between      = require('between')
 
 inherits(Set, EventEmitter)
 
@@ -99,7 +99,7 @@ Set.prototype.toJSON = function () {
   return this._array.map(function (e) {
     return e.state
   }).sort(function (a, b) {
-    return u.strord(a._sort || a.id, b._sort || b.id)
+    return between.strord(a._sort || a.id, b._sort || b.id)
   })
 }
 

@@ -1,12 +1,19 @@
 var inherits     = require('util').inherits
 var Row          = require('./row')
-var u            = require('./utils')
+var between      = require('between')
 var Set          = require('./set')
 var Seq          = require('./seq')
 var Scuttlebutt  = require('scuttlebutt')
 var EventEmitter = require('events').EventEmitter
 
 inherits(Doc, Scuttlebutt)
+
+function merge(to, from) {
+  for(var k in from)
+    to[k] = from[k]
+  return to
+}
+
 
 module.exports = Doc
 //doc
@@ -40,7 +47,7 @@ module.exports = Doc
 */
 
 function order (a, b) {
-  return u.strord(a[1], b[1]) || u.strord(a[2], b[2])
+  return between.strord(a[1], b[1]) || between.strord(a[2], b[2])
 }
 
 function Doc (id) {
@@ -78,7 +85,6 @@ Doc.prototype._add = function (id, source, change) {
   this.rows[r.id] = r
 
   function track (changes, source) {
-//    var update = [r.id, changes, u.timestamp(), doc.id]
     doc.localUpdate([r.id, changes])
   }
 
@@ -129,14 +135,12 @@ Doc.prototype.applyUpdate = function (update, source) {
 
   //remember the most recent update from each node.
   //now handled my scuttlebutt.
-//  if(!this.recieved[from] || this.recieved[from] < timestamp)
-//    this.recieved[from] = timestamp
-
 //  if(!row.validate(changes)) return
   
   for(var key in changes) {
     var value = changes[key]
     if(!hist[key] || order(hist[key], update) < 0) {
+      if(hist[key]) this.emit('_remove', hist[key])
       hist[key] = update
       changed[key] = changes[key]
       emit = true 
@@ -149,7 +153,7 @@ Doc.prototype.applyUpdate = function (update, source) {
 //  hang on, in the mean time, I will probably only be managing n < 10 sets. 
 //  at once, 
 
-  u.merge(row.state, changed)
+  merge(row.state, changed)
   for(var k in changed)
     this.sets.emit(k, row, changed) 
   

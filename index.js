@@ -3,7 +3,6 @@
 
 var inherits     = require('util').inherits
 var EventEmitter = require('events').EventEmitter
-var u            = require('./utils')
 
 exports = module.exports = require('./doc')
 exports.Row              = require('./row')

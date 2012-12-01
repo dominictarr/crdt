@@ -3,13 +3,13 @@
 var Set      = require('./set')
 var Row      = require('./row')
 var inherits = require('util').inherits
-var u        = require('./utils')
+var between  = require('between')
 
 module.exports = Seq
 
 function sort (array) {
   return array.sort(function (a, b) {
-    return u.strord(a.get('_sort'), b.get('_sort'))
+    return between.strord(a.get('_sort'), b.get('_sort'))
   })
 }
 
@@ -54,8 +54,8 @@ function Seq (doc, key, val) {
       obj = doc.rows[obj]
 
     var _sort = 
-       u.between(before, after ) 
-     + u.randstr(3) //add a random tail so it's hard
+       between.between(before, after ) 
+     + between.randstr(3) //add a random tail so it's hard
                     //to concurrently add two items with the
                     //same sort.
  
