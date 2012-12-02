@@ -107,7 +107,7 @@ Doc.prototype.set = function (id, change) {
 }
 
 Doc.prototype.insert = function (change) {
-  var id = createId()
+  var id = change.id === undefined ? createId() : change.id
   this._add(id, 'local', change)
   return id
 }
