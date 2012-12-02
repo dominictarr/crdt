@@ -5,6 +5,7 @@ var Set          = require('./set')
 var Seq          = require('./seq')
 var Scuttlebutt  = require('scuttlebutt')
 var EventEmitter = require('events').EventEmitter
+var createId     = require('scuttlebutt/util').createId
 
 inherits(Doc, Scuttlebutt)
 
@@ -103,6 +104,12 @@ Doc.prototype.timeUpdated = function (row, key) {
 Doc.prototype.set = function (id, change) {
   var r = this._add(id, 'local', change)
   return r.set(change)
+}
+
+Doc.prototype.insert = function (change) {
+  var id = createId()
+  this._add(id, 'local', change)
+  return id
 }
 
 /*
