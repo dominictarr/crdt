@@ -75,6 +75,13 @@ add a `Row` to the document initialized to `obj`
 `obj` <em>must</em> have a unique `id` property.
 return a `Row`
 
+### var id = Doc#insert(obj)
+
+Insert a `Row` initialized to an object `obj` which may not necessarily already
+have a unique `id` property. If `obj.id` isn't already set, generate a new
+random id.
+
+Return the `id` being used to store the row.
 
 ### Doc#createSet (key, value)
 
