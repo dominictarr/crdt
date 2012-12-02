@@ -8,11 +8,13 @@ exports.test = function (t) {
   var obj = {prop: 'key'}
 
   doc.on('create', function (row) {
-    assert.deepEqual(row.toJSON(), { id: id, prop: 'key' })
-    assert.deepEqual(obj, {prop: 'key'})
+    process.nextTick(function () {
+        assert.deepEqual(row.toJSON(), { id: id, prop: 'key' })
+        assert.deepEqual(obj, {prop: 'key'})
+    })
   })
 
-  var id = doc.insert(obj)
+  var id = doc.add(obj).id
 
   t.end()
 }

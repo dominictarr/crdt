@@ -67,10 +67,8 @@ function Doc (id) {
 }
 
 Doc.prototype.add = function (initial) {
-
-  if(!initial.id)
-    throw new Error('id is required')
-  var r = this._add(initial.id, 'local')
+  var id = initial.id === undefined ? createId() : initial.id
+  var r = this._add(id, 'local')
   r._set(initial, 'local')
   return r
 }
@@ -104,12 +102,6 @@ Doc.prototype.timeUpdated = function (row, key) {
 Doc.prototype.set = function (id, change) {
   var r = this._add(id, 'local', change)
   return r.set(change)
-}
-
-Doc.prototype.insert = function (change) {
-  var id = change.id === undefined ? createId() : change.id
-  this._add(id, 'local', change)
-  return id
 }
 
 /*

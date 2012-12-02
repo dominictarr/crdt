@@ -12,7 +12,7 @@ exports.test = function (t) {
     assert.deepEqual(obj, {id: 'abc', prop: 'key'})
   })
 
-  var id = doc.insert(obj)
+  var id = doc.add(obj).id
   assert.equal(id, 'abc')
 
   t.end()
