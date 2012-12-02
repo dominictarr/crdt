@@ -21,6 +21,7 @@
     "it-is": "~1.0.1",
     "event-stream": "~3.0",
     "asynct": "~1.1",
+    "assertions": "~2.3",
     "kv": "~0.5",
     "mux-demux": "~3.2"
   },
