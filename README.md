@@ -40,7 +40,7 @@ the client side ...
 
 ``` js
 var net = require('net')
-var es  = requier('es')
+var es  = require('es')
 var Doc = require('crdt').Doc
 
 var A = new Doc()
@@ -55,7 +55,7 @@ and the server ...
 
 ``` js
 var net = require('net')
-var es  = requier('es')
+var es  = require('es')
 var Doc = require('crdt').Doc
 
 var A = new Doc()
