@@ -10,12 +10,9 @@
   "scripts": {
     "test": "asynct test/*.js"
   },
-  "engines": {
-    "node": "*"
-  },
   "dependencies": {
-    "between": "0.0.0",
-    "scuttlebutt": "~5.0"
+    "between": "~0.1",
+    "scuttlebutt": "~5.5"
   },
   "devDependencies": {
     "it-is": "~1.0.1",
