@@ -52,6 +52,7 @@ function order (a, b) {
 }
 
 function Doc (id) {
+  if (!(this instanceof Doc)) return new Doc(id)
   //the id of the doc refers to the instance.
   //that is, to the node.
   //it's used to identify a node 
