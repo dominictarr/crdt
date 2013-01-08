@@ -34,7 +34,7 @@ var as
 We just replicated two documents with in the same process...
 this is the idea, but of course, we want to do it on different machines...
 
-notice the pattern is basically the same...  
+notice the pattern is basically the same...
 
 the client side ...
 
@@ -89,10 +89,21 @@ var cheeses = doc.createSet('type', 'cheese')
 
 `key` and `value` must both be strings.
 
+### Doc#createSet (filter)
+
+You can also create a `Set` using a filter function.
+
+```js
+var cheeses = doc.createSet(function (state) {
+    return state.type === 'cheese'
+})
+```
 
 ### Doc#createSeq (key, value)
 
 same as `Doc#createSet` except that seqs have a significant order.
+
+sequences can also be created with a filter using `Doc#createSeq(filter)`
 
 ### Doc#createStream (opts)
 
@@ -115,8 +126,8 @@ an object with in a crdt `Doc`
 set `key` to `value`. if `Row#set(obj)` is called instead
 all the keys in obj will update atomically.
 
-This causes a 'change' event to be emitted, and an update message 
-to be sent down the stream. (note, if the stream in not yet connected, 
+This causes a 'change' event to be emitted, and an update message
+to be sent down the stream. (note, if the stream in not yet connected,
 that is okay, current state of the document is replicated as soon as the
 streams are connected.)
 
@@ -126,13 +137,13 @@ get the current value for a key.
 
 ### Row#toJSON()
 
-return a raw object ready for serialization. 
+return a raw object ready for serialization.
 this is not a JSON string yet, misleading name,
 but that is the correct JSON.stringify api.
 
 ### event: Row.emit('change', changed)
 
-Emitted when a row is changed. this may be the result of a local or a 
+Emitted when a row is changed. this may be the result of a local or a
 remote update.
 
 changed is the a hash of the fields that have changed.
@@ -167,6 +178,19 @@ removes a row from the set. sets the set's `key`, to null.
 note, if you have multiple sets with the same key, they are mutually exclusive,
 and adding a node to a different set will remove it from the first one.
 
+### event: Set.emit('add', Row)
+
+Emitted when a row is added to the set.
+
+### event: Set.emit('changes', Row, changed)
+
+Emitted when a row in the set changed. The changed value contains a hash
+of the key / values that changed.
+
+### event: Set.emit('remove', Row)
+
+Emitted when a row is removed from the set
+
 ## Seq
 
 just like a Set, but the items are ordered.
@@ -180,7 +204,7 @@ get the first item in the seq.
 
 get the last item in the seq.
 
-### Set#has(row|id)
+### Seq#has(row|id)
 
 check if a row|id is a member of the seq. (inherited from `Set`)
 
@@ -220,3 +244,14 @@ insert `item` before the given `row/id`.
 
 insert `item` after the given `row/id`.
 
+### Seq#next(key)
+
+Finds the item that is after this key
+
+### Seq#prev(key)
+
+Finds the item that is before this key
+
+### event: Seq.emit('move', Row)
+
+Emitted when the row has changed it's position in the sequence
