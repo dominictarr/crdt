@@ -19,7 +19,7 @@ module.exports = Set
   heh, join queries? or rather, recursive queries,
   for when rows have sets.
 
-  that is my vibe. don't make a database you have to 
+  that is my vibe. don't make a database you have to
   _map_ to your application. pre-map the database.
 
   could also specify sets like
@@ -34,7 +34,7 @@ module.exports = Set
     }
   }
 
-  or use map-reduces. remember, if the the reduce is 
+  or use map-reduces. remember, if the the reduce is
   monotonic you don't have to remember each input.
 */
 
@@ -44,10 +44,16 @@ function Set(doc, key, value) {
   var array = this._array = []
   var rows = this.rows =  {}
   var set = this
+  var filter
 
-  //DO NOT CHANGE once you have created the set.
-  this.key = key
-  this.value = value
+  if ('function' === typeof key) {
+    filter = this.filter = key
+    key = null
+  } else {
+    //DO NOT CHANGE once you have created the set.
+    this.key = key
+    this.value = value
+  }
 
   function add(row) {
     array.push(row)
@@ -55,7 +61,9 @@ function Set(doc, key, value) {
     set.emit('add', row)
 
     function remove (_, changed) {
-      if(row.state[key] === value) {
+      if ((key && row.state[key] === value) ||
+          (filter && filter(row.state))
+      ) {
         set.emit('changes', row, changed)
         return
       }
@@ -68,23 +76,41 @@ function Set(doc, key, value) {
     }
 
     row.on('changes', remove)
- 
+
   }
 
-  doc.sets.on(key, function (row, changed) {
-    if(changed[key] !== value) return 
-    add(row)
-  })
+  if (!filter) {
+    doc.sets.on(key, function (row, changed) {
+      if(changed[key] !== value) return
+      add(row)
+    })
+  } else {
+    doc.on('create', function (row) {
+      if (filter(row.state)) {
+        add(row)
+      }
+    })
+  }
+
 
   this.rm = this.remove = function (row) {
-    row = this.get(row) 
+    row = this.get(row)
     if(!row) return
-    return row.set(key, null)
+    if (key) {
+      return row.set(key, null)
+    } else {
+      throw new Error("Set cannot remove rows with arbitary filters")
+    }
   }
 
   for(var id in doc.rows) {
     var row = doc.get(id)
-    if(row.get(key) === value) add(row) 
+    if (key && row.get(key) === value) {
+      add(row)
+    } else if (filter && filter(row.state)) {
+      add(row)
+    }
+
   }
 
   this.setMaxListeners(Infinity)
@@ -103,7 +129,7 @@ Set.prototype.toJSON = function () {
   })
 }
 
-Set.prototype.each = 
+Set.prototype.each =
 Set.prototype.forEach = function (iter) {
   return this._array.forEach(iter)
 }
@@ -112,8 +138,8 @@ Set.prototype.get = function (id) {
   if(!arguments.length)
     return this.array
   return (
-      'string' === typeof id ? this.rows[id] 
-    : 'number' === typeof id ? this.rows[id] 
+      'string' === typeof id ? this.rows[id]
+    : 'number' === typeof id ? this.rows[id]
     : id && id.id            ? this.rows[id.id]
     :                          null
   )

@@ -54,17 +54,6 @@ exports['test - post'] = function (t) {
   var set = doc.createSet('type', 'thing')
   var set2 = doc.createSet('type', 'other')
 
-  function log(set) {
-
-    set.on('add', function (row) {
-      console.log('add', set.value,'->', row.state)
-    })
-    set.on('remove', function (row) {
-      console.log('rm', set.value,'->', row.state)
-    })
-
-  }
-
   log(set)
   log(set2)
 
@@ -84,4 +73,46 @@ exports['test - post'] = function (t) {
   t.end()
 }
 
+exports['test - filters'] = function (t) {
+  console.log("HELLO")
 
+  var doc = new crdt.Doc()
+
+  var set = doc.createSet(function (state) {
+    return state.type === 'thing' && state.what <= 5
+  })
+  var set2 = doc.createSet(function (state) {
+    return state.type === 'other' && state.what > 8
+  })
+
+  log(set)
+  log(set2)
+
+  console.log(set.toJSON())
+  console.log(set2.toJSON())
+
+  doc.add({id: 'a', type: 'thing', what: 3})
+  doc.add({id: 'b', type: 'thing', what: 5})
+  doc.add({id: 'a', type: 'other', what: 7})
+  doc.add({id: 'c', type: 'thing', what: 9})
+
+  a.deepEqual(set.toJSON(), [
+    { id: 'b', type: 'thing', what: 5 }
+  ])
+
+  a.deepEqual(set2.toJSON(), [])
+
+  console.log("passed")
+  t.end()
+}
+
+function log(set) {
+
+  set.on('add', function (row) {
+    console.log('add', set.value,'->', row.state)
+  })
+  set.on('remove', function (row) {
+    console.log('rm', set.value,'->', row.state)
+  })
+
+}
