@@ -16,7 +16,7 @@ function sort (array) {
 inherits(Seq, Set)
 
 function find (obj, iter) {
-  
+
   for(var k in obj) {
     var v = obj[k]
     if(iter(v, k, obj)) return v
@@ -27,19 +27,24 @@ function find (obj, iter) {
 function Seq (doc, key, val) {
 
   Set.call(this, doc, key, val)
+
+  if (typeof key !== 'string') {
+    key = null
+  }
+
   var seq = this
   this.on('changes', function (row, changes) {
     if(!changes._sort) return
     sort(seq._array)
     //check if there is already an item with this sort key.
-    var prev = 
+    var prev =
     find(seq._array, function (other) {
       return other != row && other.get('_sort') == row.get('_sort')
     })
 
-    //nudge it forward if it has the same key.    
+    //nudge it forward if it has the same key.
     if(prev)
-      seq.insert(row, prev, seq.next(row)) 
+      seq.insert(row, prev, seq.next(row))
     else
       seq.emit('move', row)
   })
@@ -53,24 +58,27 @@ function Seq (doc, key, val) {
     if('string' === typeof obj)
       obj = doc.rows[obj]
 
-    var _sort = 
-       between.between(before, after ) 
+    var _sort =
+       between.between(before, after )
      + between.randstr(3) //add a random tail so it's hard
                     //to concurrently add two items with the
                     //same sort.
- 
+
     var r, changes
     if(obj instanceof Row) {
       r = obj
       changes = {_sort: _sort}
-      if(r.get(key) != val)
+      if (key && r.get(key) != val) {
         changes[key] = val
+      }
       r.set(changes)
     } else {
       obj._sort = _sort
-      obj[key] = val
+      if (key) {
+        obj[key] = val
+      }
       r = doc.set(id(obj), obj)
-    } 
+    }
     sort(this._array)
     return r
   }
@@ -79,7 +87,7 @@ function Seq (doc, key, val) {
 function toKey (key) {
 
   return (
-     'string' === typeof key ? key 
+     'string' === typeof key ? key
   :  key instanceof Row      ? key.get()._sort
   :  key                     ? key._sort
   : null
@@ -125,9 +133,9 @@ Seq.prototype.next = function (key) {
 }
 
 function id(obj) {
-  return (obj.id 
-  ||  obj._id 
-  ||  '_' + Date.now() 
+  return (obj.id
+  ||  obj._id
+  ||  '_' + Date.now()
     + '_' + Math.round(Math.random()*1000)
   )
 }
@@ -161,7 +169,7 @@ Seq.prototype.unshift = function (obj) {
 }
 
 Seq.prototype.push = function (obj) {
-  return this.insert(obj, this.last(), '~') 
+  return this.insert(obj, this.last(), '~')
 }
 
 Seq.prototype.length = function () {
