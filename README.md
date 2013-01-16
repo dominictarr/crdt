@@ -172,6 +172,11 @@ get an item in this set, if it exists.
 
 Iterate over the `Rows` in the set.
 
+### Set#onEach(iter)
+
+Iterate over the `Rows` in the set and any new row that may be
+added to the set in the future.
+
 ### Set#remove(row)
 
 removes a row from the set. sets the set's `key`, to null.

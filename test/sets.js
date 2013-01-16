@@ -74,9 +74,8 @@ exports['test - post'] = function (t) {
 }
 
 exports['test - filters'] = function (t) {
-  console.log("HELLO")
-
   var doc = new crdt.Doc()
+  console.log("# Filters")
 
   var set = doc.createSet(function (state) {
     return state.type === 'thing' && state.what <= 5
@@ -106,6 +105,33 @@ exports['test - filters'] = function (t) {
   t.end()
 }
 
+exports['test - create set later'] = function (t) {
+  var doc = new crdt.Doc()
+
+  console.log("LATER")
+
+  doc.add({id: 'a', type: 'thing', what: 3})
+  doc.add({id: 'b', type: 'thing', what: 5})
+  doc.add({id: 'a', type: 'other', what: 7})
+  doc.add({id: 'c', type: 'thing', what: 9})
+
+  var set = doc.createSet("type", "thing")
+  var states = []
+
+  set.onEach(function (row, state) {
+    states.push(row.state)
+  })
+
+  process.nextTick(function () {
+    a.deepEqual(states, [
+      { id: 'b', type: 'thing', what: 5 },
+      { id: 'c', type: 'thing', what: 9 }
+    ])
+
+    t.end()
+  })
+}
+
 function log(set) {
 
   set.on('add', function (row) {
@@ -116,3 +142,4 @@ function log(set) {
   })
 
 }
+
