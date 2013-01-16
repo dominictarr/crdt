@@ -106,6 +106,21 @@ exports['test - filters'] = function (t) {
   t.end()
 }
 
+exports['set caching'] = function (t) {
+  var doc = new crdt.Doc()
+
+  var set1 = doc.createSet("foo", "bar")
+  var set2 = doc.createSet("foo", "bar")
+
+  a.equal(set1, set2)
+
+  var set3 = doc.createSet(function () { })
+  var set4 = doc.createSet(function () { })
+  a.notEqual(set3, set4)
+
+  t.end()
+}
+
 function log(set) {
 
   set.on('add', function (row) {

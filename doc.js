@@ -186,15 +186,18 @@ Doc.prototype.history = function (sources) {
 }
 
 function _set(self, key, val, type) {
-  var id
-  if (typeof key === 'string') {
-    id = key + ':' + val
-  } else {
-    id = createId()
+  var id = key && key + ':' + val
+  if(id && self.sets[id]) {
+    return self.sets[id]
   }
-  if(self.sets[id]) return self.sets[id]
-  return self.sets[id] = new type(self, key, val)
+
+  var set = new type(self, key, val)
+  if (id) {
+    self.sets[id] = set
+  }
+  return set
 }
+
 
 Doc.prototype.createSet = function (key, val) {
   return _set(this, key, val, Set)
