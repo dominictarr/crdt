@@ -186,7 +186,7 @@ Doc.prototype.history = function (sources) {
 }
 
 function _set(self, key, val, type) {
-  var id = key && key + ':' + val
+  var id = typeof key === 'string' && key + ':' + val
   if(id && self.sets[id]) {
     return self.sets[id]
   }
