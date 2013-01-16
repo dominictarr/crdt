@@ -193,7 +193,7 @@ function _set(self, key, val, type) {
     id = createId()
   }
   if(self.sets[id]) return self.sets[id]
-  return self.sets[key + ':' + val] = new type(self, key, val)
+  return self.sets[id] = new type(self, key, val)
 }
 
 Doc.prototype.createSet = function (key, val) {
