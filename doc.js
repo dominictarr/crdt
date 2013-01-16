@@ -24,7 +24,7 @@ module.exports = Doc
   use a anti-tombstone to show something is alive.
   breathing: count. -- updated by an authority.
   set breathing to 0 to kill something.
-  
+
   if a node has rows that have been garbage collected on the server,
   it will be obvious from the value of breathing.
 
@@ -33,12 +33,12 @@ module.exports = Doc
 
   node reconnects.
   server updates the node, but only increments _breathing for some rows.
-  
+
   clearly, the nodes that do not have an upto date _breathing are either
   dead, or where created by the node while it was offline.
 
   would breathing need to be a vector clock?
-  
+
   if the disconneded node is still updating the rows,
   maybe it shouldn't be deleted, that is, undeleted.
 
@@ -55,7 +55,7 @@ function Doc (id) {
   if (!(this instanceof Doc)) return new Doc(id)
   //the id of the doc refers to the instance.
   //that is, to the node.
-  //it's used to identify a node 
+  //it's used to identify a node
 //  this.id = id || '#' + Math.round(Math.random()*1000)
   this.rows = {}
   this.hist = {}
@@ -95,7 +95,7 @@ Doc.prototype._add = function (id, source, change) {
 }
 
 Doc.prototype.timeUpdated = function (row, key) {
-  var h = this.hist[row.id] 
+  var h = this.hist[row.id]
   if(!h) return
   return h[key][2]
 }
@@ -136,29 +136,29 @@ Doc.prototype.applyUpdate = function (update, source) {
   //remember the most recent update from each node.
   //now handled my scuttlebutt.
 //  if(!row.validate(changes)) return
-  
+
   for(var key in changes) {
     var value = changes[key]
     if(!hist[key] || order(hist[key], update) < 0) {
       if(hist[key]) this.emit('_remove', hist[key])
       hist[key] = update
       changed[key] = changes[key]
-      emit = true 
+      emit = true
     }
   }
 
-//  probably, there may be mulitple sets that listen to the same key, 
+//  probably, there may be mulitple sets that listen to the same key,
 //  but activate on different values...
 //
-//  hang on, in the mean time, I will probably only be managing n < 10 sets. 
-//  at once, 
+//  hang on, in the mean time, I will probably only be managing n < 10 sets.
+//  at once,
 
   merge(row.state, changed)
   for(var k in changed)
-    this.sets.emit(k, row, changed) 
-  
+    this.sets.emit(k, row, changed)
+
   if(!emit) return
-  
+
   if(row._new) {
     this.emit('add', row)
     this.emit('create', row) //alias
@@ -186,9 +186,14 @@ Doc.prototype.history = function (sources) {
 }
 
 function _set(self, key, val, type) {
-   var id = key + ':' + val
-  if(self.sets[id]) return self.sets[id] 
-  return self.sets[key + ':' + val] = new type(self, key, val) 
+  var id
+  if (typeof key === 'string') {
+    id = key + ':' + val
+  } else {
+    id = createId()
+  }
+  if(self.sets[id]) return self.sets[id]
+  return self.sets[key + ':' + val] = new type(self, key, val)
 }
 
 Doc.prototype.createSet = function (key, val) {
@@ -206,7 +211,7 @@ Doc.prototype.toJSON = function () {
   return j
 }
 //retrive a reference to a row.
-//if the row is not created yet, create 
+//if the row is not created yet, create
 Doc.prototype.get = function (id) {
   return this.rows[id] = this.rows[id] || this._add(new Row(id), 'local')
 }
