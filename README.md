@@ -99,6 +99,9 @@ var cheeses = doc.createSet(function (state) {
 })
 ```
 
+A filter function should just be a more expressive filter and
+shouldn't be a stateful function
+
 ### Doc#createSeq (key, value)
 
 same as `Doc#createSet` except that seqs have a significant order.
