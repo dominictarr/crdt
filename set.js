@@ -110,11 +110,15 @@ function Set(doc, key, value) {
     } else if (filter && filter(row.state)) {
       add(row)
     }
-
   }
 
   this.setMaxListeners(Infinity)
 
+}
+
+Set.prototype.onEach = function (callback) {
+  this.forEach(callback)
+  this.on("add", callback)
 }
 
 Set.prototype.asArray = function () {
