@@ -51,6 +51,7 @@ function Set(doc, key, value) {
     key = null
   } else {
     //DO NOT CHANGE once you have created the set.
+    if(key === '__proto__') throw new Error('__proto__ is illegal key')
     this.key = key
     this.value = value
   }
@@ -141,6 +142,7 @@ Set.prototype.forEach = function (iter) {
 Set.prototype.get = function (id) {
   if(!arguments.length)
     return this.array
+  if(id === '__proto__') throw new Error('__proto__ is invalid id')
   return (
       'string' === typeof id ? this.rows[id]
     : 'number' === typeof id ? this.rows[id]

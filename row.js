@@ -18,6 +18,8 @@ function Row (id) {
 Row.prototype.set = function (changes, v) {
   if(arguments.length == 2) {
     var k = changes 
+    if(k === '__proto__')
+      return this
     changes = {}
     changes[k] = v
   }

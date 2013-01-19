@@ -25,7 +25,9 @@ function find (obj, iter) {
 }
 
 function Seq (doc, key, val) {
-
+  if(key == '__proto__')
+    throw new Error('__proto__ is invalid key')
+  
   Set.call(this, doc, key, val)
 
   if (typeof key !== 'string') {
@@ -161,6 +163,7 @@ Seq.prototype.indexOf = function (obj) {
 }
 
 Seq.prototype.at = function (i) {
+  if('__proto__' === i) throw new Error('__proto__ invalid index')
   return this._array[i]
 }
 

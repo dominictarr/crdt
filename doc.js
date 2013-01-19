@@ -69,6 +69,8 @@ function Doc (id) {
 
 Doc.prototype.add = function (initial) {
   var id = initial.id === undefined ? createId() : initial.id
+  if(id === '__proto__')
+    throw new Error('__proto__ is illegial id')
   var r = this._add(id, 'local')
   r._set(initial, 'local')
   return r
@@ -78,6 +80,8 @@ Doc.prototype._add = function (id, source, change) {
 
   var doc = this
 
+  if(id === '__proto__')
+    throw new Error('__proto__ is illegial id')
   if(this.rows[id])
     return this.rows[id]
 
@@ -101,6 +105,8 @@ Doc.prototype.timeUpdated = function (row, key) {
 }
 
 Doc.prototype.set = function (id, change) {
+  if(id === '__proto__')
+    throw new Error('__proto__ is illegial id')
   var r = this._add(id, 'local', change)
   return r.set(change)
 }
@@ -121,10 +127,17 @@ Doc.prototype.applyUpdate = function (update, source) {
   //apply an update to a row.
   //take into account histroy.
   //and insert the change into the correct place.
+  if(!(Array.isArray(update[0])
+    && 'string' === typeof update[0][0]
+  )) return this.emit('invalid', new Error('invalid update'))
+
   var id      = update[0][0]
   var changes = update[0][1]
   var timestamp = update[1]
   var from    = update[2]
+
+  if(id === '__proto__')
+    return this.emit('invalid', new Error('__proto__ is illegial id'))
 
   var changed = {}
 
@@ -138,12 +151,14 @@ Doc.prototype.applyUpdate = function (update, source) {
 //  if(!row.validate(changes)) return
 
   for(var key in changes) {
-    var value = changes[key]
-    if(!hist[key] || order(hist[key], update) < 0) {
-      if(hist[key]) this.emit('_remove', hist[key])
-      hist[key] = update
-      changed[key] = changes[key]
-      emit = true
+    if(changes.hasOwnProperty(key)) { 
+      var value = changes[key]
+      if(!hist[key] || order(hist[key], update) < 0) {
+        if(hist[key]) this.emit('_remove', hist[key])
+        hist[key] = update
+        changed[key] = changes[key]
+        emit = true
+      }
     }
   }
 
@@ -200,22 +215,29 @@ function _set(self, key, val, type) {
 
 
 Doc.prototype.createSet = function (key, val) {
+  if(key === '__proto__')
+    throw new Error('__proto__ is invalid key')
   return _set(this, key, val, Set)
 }
 
 Doc.prototype.createSeq = function (key, val) {
+  if(key === '__proto__')
+    throw new Error('__proto__ is invalid key')
   return _set(this, key, val, Seq)
 }
 
 Doc.prototype.toJSON = function () {
   var j = {}
-  for (var k in this.rows)
-    j[k] = this.rows[k].state
+  for (var k in this.rows) {
+    if(this.rows.hasOwnProperty(k))
+      j[k] = this.rows[k].state
+  }
   return j
 }
 //retrive a reference to a row.
 //if the row is not created yet, create
 Doc.prototype.get = function (id) {
+  if(id === '__proto__') throw new Error('__proto__ is illegal id')
   return this.rows[id] = this.rows[id] || this._add(new Row(id), 'local')
 }
 
