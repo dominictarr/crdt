@@ -24,7 +24,7 @@ Row.prototype.set = function (changes, v) {
     changes[k] = v
   }
 
-  if(changes.id && changes.id !== this.state.id)
+  if(changes !== null && changes.id && changes.id !== this.state.id)
     throw new Error('id cannot be changed')
 
   this._set(changes, 'local')  

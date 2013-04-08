@@ -111,6 +111,10 @@ Doc.prototype.set = function (id, change) {
   return r.set(change)
 }
 
+Doc.prototype.rm = function (id) {
+  this.set(id, null)
+}
+
 /*
   histroy for each row is indexed by key.
   key -> update that set that key.
@@ -149,6 +153,31 @@ Doc.prototype.applyUpdate = function (update, source) {
   //remember the most recent update from each node.
   //now handled my scuttlebutt.
 //  if(!row.validate(changes)) return
+
+  if (changes === null) {
+
+    // clean up the history, this seems to work but seems like it should
+    // be unnecessary
+    changes = {}
+    for(var key in row.state) {
+      if(row.state.hasOwnProperty(key)) {
+        changes[key] = null;
+      }
+    }
+
+    // remove from all sets
+    for (var setId in this.sets) {
+      var isSet = setId.indexOf(':') > 0
+      if (isSet) {
+        delete this.sets[setId].rows[row.id]
+      }
+    }
+
+    // delete from the doc rows
+    delete this.rows[id]
+    row.removeAllListeners('preupdate');
+  }
+
 
   for(var key in changes) {
     if(changes.hasOwnProperty(key)) { 

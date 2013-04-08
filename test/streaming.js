@@ -232,3 +232,29 @@ test ('client-server', function (t) {
     })
   })
 })
+
+test('row remove', function (t) {
+
+  var a = new crdt.Doc()
+  var b = new crdt.Doc()
+  a.sync = b.sync = true
+  var as = crdt.createStream(a, {wrapper: 'raw'})
+  var bs = crdt.createStream(b, {wrapper: 'raw'})
+
+  bs.pipe(as).pipe(bs)
+
+  var row = {id: 'short-timer', prop: 'key'}
+  b.add(row)
+
+  next(function () {
+
+    assert.deepEqual(b.toJSON(), a.toJSON())
+    a.rm(row.id)
+
+    next(function () {
+      assert.deepEqual(b.toJSON(), a.toJSON())
+      t.end()
+    })
+  })
+})
+
