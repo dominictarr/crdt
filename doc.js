@@ -89,10 +89,15 @@ Doc.prototype._add = function (id, source, change) {
   this.rows[r.id] = r
 
   function track (changes, source) {
+    //console.log(changes, source)
     doc.localUpdate([r.id, changes])
   }
 
   r.on('preupdate', track)
+
+  r.on('remove', function () {
+    r.removeAllListeners('preupdate')
+  })
 
   r._new = true
   return r
@@ -156,8 +161,7 @@ Doc.prototype.applyUpdate = function (update, source) {
 
   if (changes === null) {
 
-    // clean up the history, this seems to work but seems like it should
-    // be unnecessary
+    // clean up the history
     changes = {}
     for(var key in row.state) {
       if(row.state.hasOwnProperty(key)) {
@@ -165,17 +169,17 @@ Doc.prototype.applyUpdate = function (update, source) {
       }
     }
 
-    // remove from all sets
+    // remove from all sets that contain row
     for (var setId in this.sets) {
       var isSet = setId.indexOf(':') > 0
-      if (isSet) {
-        delete this.sets[setId].rows[row.id]
-      }
+      var set = this.sets[setId]
+      var setContainsRow = isSet && set && set.get(row.id)
+      if (setContainsRow) set.rm(row)
     }
 
     // delete from the doc rows
     delete this.rows[id]
-    row.removeAllListeners('preupdate');
+    this.emit('remove', row)
   }
 
 
