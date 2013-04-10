@@ -9,22 +9,10 @@ exports.test = function (t) {
 
   var init = {id: 'taonihu', prop: 'key', type: 'thing'}
 
-
-  // doc.on('create', function (row) {
-  //   //assert.deepEqual(row.toJSON(), init)
-  //   console.log(row);
-  //   doc.rm(row.id);
-  // })
-
-  // doc.on('row_update', function (update) {
-  //   console.log(doc)
-  //   assert(doc.rows[init.id] === undefined)
-  //   assert(set.get(init.id) === undefined)
-
-  // })
-
   doc.add(init)
   doc.rm(init.id)
+  doc.rm(init.id)  // test a double row delete
+  doc.rm('bogus')  // test for non-existent
 
   next(function () {
     assert(doc.rows[init.id] === undefined)

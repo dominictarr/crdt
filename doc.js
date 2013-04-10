@@ -162,10 +162,13 @@ Doc.prototype.applyUpdate = function (update, source) {
   if (changes === null) {
 
     // clean up the history
-    changes = {}
     for(var key in row.state) {
       if(row.state.hasOwnProperty(key)) {
-        changes[key] = null;
+          if(!hist[key] || order(hist[key], update) < 0) {
+            if(hist[key]) this.emit('_remove', hist[key])
+            hist[key] = [ null, update[1], update[2]]
+            emit = true
+          }
       }
     }
 
@@ -181,16 +184,16 @@ Doc.prototype.applyUpdate = function (update, source) {
     delete this.rows[id]
     this.emit('remove', row)
   }
-
-
-  for(var key in changes) {
-    if(changes.hasOwnProperty(key)) { 
-      var value = changes[key]
-      if(!hist[key] || order(hist[key], update) < 0) {
-        if(hist[key]) this.emit('_remove', hist[key])
-        hist[key] = update
-        changed[key] = changes[key]
-        emit = true
+  else {
+    for(var key in changes) {
+      if(changes.hasOwnProperty(key)) { 
+        var value = changes[key]
+        if(!hist[key] || order(hist[key], update) < 0) {
+          if(hist[key]) this.emit('_remove', hist[key])
+          hist[key] = update
+          changed[key] = value
+          emit = true
+        }
       }
     }
   }
