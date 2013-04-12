@@ -89,10 +89,15 @@ Doc.prototype._add = function (id, source, change) {
   this.rows[r.id] = r
 
   function track (changes, source) {
+    //console.log(changes, source)
     doc.localUpdate([r.id, changes])
   }
 
   r.on('preupdate', track)
+
+  r.on('remove', function () {
+    r.removeAllListeners('preupdate')
+  })
 
   r._new = true
   return r
@@ -109,6 +114,10 @@ Doc.prototype.set = function (id, change) {
     throw new Error('__proto__ is illegial id')
   var r = this._add(id, 'local', change)
   return r.set(change)
+}
+
+Doc.prototype.rm = function (id) {
+  this.set(id, null)
 }
 
 /*
@@ -150,14 +159,41 @@ Doc.prototype.applyUpdate = function (update, source) {
   //now handled my scuttlebutt.
 //  if(!row.validate(changes)) return
 
-  for(var key in changes) {
-    if(changes.hasOwnProperty(key)) { 
-      var value = changes[key]
-      if(!hist[key] || order(hist[key], update) < 0) {
-        if(hist[key]) this.emit('_remove', hist[key])
-        hist[key] = update
-        changed[key] = changes[key]
-        emit = true
+  if (changes === null) {
+
+    // clean up the history
+    for(var key in row.state) {
+      if(row.state.hasOwnProperty(key)) {
+          if(!hist[key] || order(hist[key], update) < 0) {
+            if(hist[key]) this.emit('_remove', hist[key])
+            hist[key] = [ null, update[1], update[2]]
+            emit = true
+          }
+      }
+    }
+
+    // remove from all sets that contain row
+    for (var setId in this.sets) {
+      var isSet = setId.indexOf(':') > 0
+      var set = this.sets[setId]
+      var setContainsRow = isSet && set && set.get(row.id)
+      if (setContainsRow) set.rm(row)
+    }
+
+    // delete from the doc rows
+    delete this.rows[id]
+    this.emit('remove', row)
+  }
+  else {
+    for(var key in changes) {
+      if(changes.hasOwnProperty(key)) { 
+        var value = changes[key]
+        if(!hist[key] || order(hist[key], update) < 0) {
+          if(hist[key]) this.emit('_remove', hist[key])
+          hist[key] = update
+          changed[key] = value
+          emit = true
+        }
       }
     }
   }

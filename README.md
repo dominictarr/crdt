@@ -76,6 +76,12 @@ If `obj` doesn't have a unique `id` property, a random key will be created.
 
 Return the `Row` object.
 
+### Doc#rm(id)
+
+Remove a `Row` from the document by `id`
+Also removes from all sets as well.
+
+
 ### Doc#createSet (key, value)
 
 Create a `Set` a set is a collection of rows defined by a particular
