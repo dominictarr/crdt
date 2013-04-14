@@ -38,8 +38,6 @@ module.exports = Set
   monotonic you don't have to remember each input.
 */
 
-//TODO check if any currently existing items should be in the set. currently, one must create the set before recieving anything.
-
 function Set(doc, key, value) {
   var array = this._array = []
   var rows = this.rows =  {}
