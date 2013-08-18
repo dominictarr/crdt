@@ -76,11 +76,17 @@ If `obj` doesn't have a unique `id` property, a random key will be created.
 
 Return the `Row` object.
 
+### Doc#get(id)
+
+Get a `Row` from the document by `id`.
+
 ### Doc#rm(id)
 
 Remove a `Row` from the document by `id`
 Also removes from all sets as well.
 
+### Doc#toJSON()
+Returns a raw `Doc` object.
 
 ### Doc#createSet (key, value)
 
