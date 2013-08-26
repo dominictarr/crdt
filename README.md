@@ -80,6 +80,11 @@ Return the `Row` object.
 
 Get a `Row` from the document by `id`.
 
+### Doc#set(id, doc)
+
+Sets `Row` with ID `id` to `doc`. Returns the `Row`. It has all the effects and
+implications of calling `Row#set`.
+
 ### Doc#rm(id)
 
 Remove a `Row` from the document by `id`
