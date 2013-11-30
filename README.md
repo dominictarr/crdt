@@ -168,6 +168,11 @@ remote update.
 
 changed is the a hash of the fields that have changed.
 
+### event: Row.emit('removed')
+
+Emitted when a row is removed. This may be the result of a local or a remote
+update.
+
 ## Set
 
 A collection of `Rows` within a document.
