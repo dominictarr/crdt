@@ -59,7 +59,6 @@ function Doc (id) {
 //  this.id = id || '#' + Math.round(Math.random()*1000)
   this.rows = {}
   this.hist = {}
-  this.recieved = {}
   this.sets = new EventEmitter() //for tracking membership of sets.
   this.setMaxListeners(Infinity)
   this.sets.setMaxListeners(Infinity)
