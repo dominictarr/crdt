@@ -1,0 +1,22 @@
+{
+  "name": "simple",
+  "description": "",
+  "version": "0.0.0",
+  "homepage": "https://github.com/dominictarr/simple",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/dominictarr/simple.git"
+  },
+  "dependencies": {
+    "reconnect": "~1.5.2",
+    "ecstatic": "~0.4.10",
+    "shoe": "0.0.15"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "set -e; for t in test/*.js; do node $t; done",
+    "build": "browserify client.js > bundle.js"
+  },
+  "author": "Dominic Tarr <dominic.tarr@gmail.com> (http://dominictarr.com)",
+  "license": "MIT"
+}
