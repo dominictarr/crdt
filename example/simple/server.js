@@ -1,5 +1,5 @@
 var crdt       = require('../..')
-var connect    = require('express') //require('connect')
+var connect    = require('connect')
 var es         = require('event-stream')
 var createShoe = require('shoe')
 var heartbeat  = require('./heartbeat')
