@@ -1,5 +1,5 @@
 var crdt       = require('../..')
-var reconnect  = require('reconnect/shoe')
+var reconnect  = require('reconnect/sock')
 var heartbeat  = require('./heartbeat')
 //var es         = require('event-stream')
 //var debug      = require('../../debug')
