@@ -1,12 +1,10 @@
 
 var crdt     = require('../..')
-var connect  = require('connect')
 var shoe     = require('shoe')
 var MuxDemux = require('mux-demux')
 var kv       = require('kv')
-
-var app = connect()
-  .use(connect.static(__dirname))
+var ecstatic = require('ecstatic')
+var http     = require('http')
 
 var docs = {
   todo: new crdt.Doc(),
@@ -28,5 +26,7 @@ shoe(function (sock) {
     else
       s.pipe(docs[s.meta.type].createStream({wrapper: 'raw'})).pipe(s)
   })).pipe(sock)
-}).install(app.listen(3000), '/shoe')
+})
+
+.install(http.createServer(ecstatic(__dirname)).listen(3000), '/shoe')
 
