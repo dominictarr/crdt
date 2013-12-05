@@ -7,7 +7,11 @@
     "url": "git://github.com/dominictarr/complex.git"
   },
   "dependencies": {
-    "domready": "~0.2.11"
+    "domready": "~0.2.13",
+    "shoe": "~0.0.15",
+    "ecstatic": "~0.4.12",
+    "mux-demux": "~3.7.8",
+    "kv": "~1.1.1"
   },
   "devDependencies": {
     "tap": "0.3.0"
