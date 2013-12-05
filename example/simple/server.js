@@ -1,11 +1,9 @@
 var crdt       = require('../..')
-var connect    = require('connect')
 var es         = require('event-stream')
 var createShoe = require('shoe')
 var heartbeat  = require('./heartbeat')
-
-var app = connect()
-  .use(connect.static(__dirname))
+var http       = require('http')
+var ecstatic   = require('ecstatic')
 
 var doc = new crdt.Doc()
 heartbeat(doc, 'Server')
@@ -27,6 +25,6 @@ var shoe = createShoe(function (sock) {
 })
 */
 
-app.on('log', console.log)
+var app = http.createServer(ecstatic(__dirname))
 shoe.install(app.listen(3000), '/simple')
 
