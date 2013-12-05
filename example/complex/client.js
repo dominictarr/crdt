@@ -1,5 +1,5 @@
-var crdt       = require('crdt')
-var reconnect  = require('reconnect/shoe')
+var crdt       = require('../..')
+var reconnect  = require('reconnect')
 var MuxDemux   = require('mux-demux')
 var kv         = require('kv')('crdt_example')
 var domready   = require('domready')

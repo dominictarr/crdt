@@ -1,4 +1,4 @@
-var crdt = require('crdt')
+var crdt = require('../..')
 
 module.exports =
 

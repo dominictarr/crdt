@@ -1,4 +1,4 @@
-var crdt = require('crdt')
+var crdt = require('../..')
 
 /*
   add some sets, that items can be dragged and dropped between,

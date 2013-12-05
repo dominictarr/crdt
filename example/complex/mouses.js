@@ -4,7 +4,7 @@
   so that users don't feel lonely.
 */
 
-var crdt = require('crdt')
+var crdt = require('../..')
 
 module.exports =
 function (doc) {
