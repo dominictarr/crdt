@@ -181,6 +181,7 @@ Doc.prototype.applyUpdate = function (update, source) {
 
     // delete from the doc rows
     delete this.rows[id]
+    row.emit('removed')
     this.emit('remove', row)
   }
   else {
