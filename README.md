@@ -3,6 +3,10 @@
 a CRDT is a data type designed so that operations on it commute - give the same result
 indepent of the order in which they are applied.
 
+[![testling badge](https://ci.testling.com/dominictarr/crdt.png)](https://ci.testling.com/dominictarr/crdt)
+[![build status](https://secure.travis-ci.org/dominictarr/crdt.png)](http://travis-ci.org/dominictarr/crdt)
+
+
 CRDTs give you eventual consistency for free. it is not necessary to track concurrent changes
 and use complicated merge algorithms. this module is useful for collaborative/distributed/peer2peer (same things)
 applications.
