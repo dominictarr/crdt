@@ -177,3 +177,41 @@ exports.random = function (t) {
   }
   t.end()
 }
+
+exports['do not emit _remove until something is not in the history'] = function (t) {
+  var doc = new crdt.Doc()
+  var s = new Seq(doc, 'type', 'thing')
+  var ary = []
+  var removed = []
+
+  doc.on('_remove', function (update) {
+    removed.push(update)
+  })
+
+  s.push({id: 'a', hello:1 })
+  s.push({id: 'b', hello:2 })
+  s.push({id: 'c', hello:3 })
+
+  s.after('a', 'b')
+  
+  var hist = doc.history()
+
+  removed.forEach(function (e) {
+    t.equal(hist.indexOf(e), -1)
+  })
+
+  removed = []
+  doc.set('a', {id: 'a', _sort: null, type: null, hello: null})
+  console.log(JSON.stringify(doc.history(), null, 2))
+
+  console.log(doc.toJSON())
+  console.log(JSON.stringify(removed))
+
+  var hist = doc.history()
+  t.equal(removed.length, 2)
+  removed.forEach(function (e) {
+    t.equal(hist.indexOf(e), -1)
+  })
+
+  t.end()
+}
