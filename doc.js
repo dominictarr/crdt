@@ -185,17 +185,25 @@ Doc.prototype.applyUpdate = function (update, source) {
     this.emit('remove', row)
   }
   else {
+    var maybe = []
     for(var key in changes) {
       if(changes.hasOwnProperty(key)) { 
         var value = changes[key]
         if(!hist[key] || order(hist[key], update) < 0) {
-          if(hist[key]) this.emit('_remove', hist[key])
+          if(hist[key] && !~maybe.indexOf(hist[key]))
+            maybe.push(hist[key])
           hist[key] = update
           changed[key] = value
           emit = true
         }
       }
     }
+    var h = this.history()
+    var self = this
+    maybe.forEach(function (e) {
+      if(!~h.indexOf(e))
+        self.emit('_remove', e)
+    })
   }
 
 //  probably, there may be mulitple sets that listen to the same key,
