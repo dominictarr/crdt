@@ -142,6 +142,10 @@ function id(obj) {
   )
 }
 
+Seq.prototype.asArray = function () {
+  return sort(this._array)
+}
+
 Seq.prototype.before = function (obj, before) {
   return this.insert(obj, this.prev(before), before)
 }
