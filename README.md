@@ -1,4 +1,4 @@
-#CRDT - Commutative Replicated Data Types
+# CRDT - Commutative Replicated Data Types
 
 a CRDT is a data type designed so that operations on it commute - give the same result
 indepent of the order in which they are applied.
