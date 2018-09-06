@@ -1,7 +1,7 @@
 # CRDT - Commutative Replicated Data Types
 
 a CRDT is a data type designed so that operations on it commute - give the same result
-indepent of the order in which they are applied.
+independent of the order in which they are applied.
 
 [![testling badge](https://ci.testling.com/dominictarr/crdt.png)](https://ci.testling.com/dominictarr/crdt)
 [![build status](https://secure.travis-ci.org/dominictarr/crdt.png)](http://travis-ci.org/dominictarr/crdt)
